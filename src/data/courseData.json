@@ -1,0 +1,111 @@
+[
+  {
+    "id": "level-1",
+    "levelNumber": 1,
+    "title": "Level 1: Everyday Basics",
+    "description": "Master foundational introductions and fingerspelling greetings.",
+    "isPremium": false,
+    "badge": "🌱 Free Tier",
+    "color": "#10b981",
+    "accentColor": "#34d399",
+    "xpReward": 150,
+    "lessons": [
+      {
+        "id": "l1-1",
+        "title": "The Name Game",
+        "subtitle": "Spell out your introduction with fingerspelling signs",
+        "description": "Arrange the scrambled letters to spell the word asked in the avatar's gesture.",
+        "type": "drag-drop",
+        "sigml": "SignFiles/yournamewhat.sigml",
+        "prompt": "Spell the word 'NAME' by dragging the letters into the target slots:",
+        "targetWord": "NAME",
+        "initialLetters": ["M", "A", "E", "N"],
+        "answer": "NAME",
+        "hint": "The avatar gestures 'Your name what?'. Assemble N-A-M-E."
+      },
+      {
+        "id": "l1-2",
+        "title": "Meet & Greet",
+        "subtitle": "Recognize friendly welcome signs",
+        "description": "Observe the 3D avatar's hand gesture and choose the correct English greeting.",
+        "type": "multiple-choice",
+        "sigml": "SignFiles/hello.sigml",
+        "prompt": "Which greeting is the avatar signing in this gesture?",
+        "options": ["Goodbye", "Hello", "Thank You", "Please"],
+        "answer": "Hello",
+        "hint": "Notice the open hand starting near the forehead and moving outwards.",
+        "explanation": "A gentle wave or hand to temple moving outwards is 'Hello'."
+      }
+    ]
+  },
+  {
+    "id": "level-2",
+    "levelNumber": 2,
+    "title": "Level 2: The Grocery Run",
+    "description": "Navigate the marketplace and order fresh fruits & daily essentials.",
+    "isPremium": true,
+    "badge": "🛒 Premium",
+    "color": "#f59e0b",
+    "accentColor": "#fbbf24",
+    "xpReward": 300,
+    "lessons": [
+      {
+        "id": "l2-1",
+        "title": "The Grocery Run",
+        "subtitle": "Visual grocery selection",
+        "description": "Watch the food sign carefully and select the corresponding grocery card.",
+        "type": "visual-select",
+        "sigml": "SignFiles/apple.sigml",
+        "prompt": "Which grocery item is being requested by the 3D avatar?",
+        "options": [
+          { "id": "opt-1", "label": "Apple", "emoji": "🍎", "description": "Crisp red orchard fruit" },
+          { "id": "opt-2", "label": "Banana", "emoji": "🍌", "description": "Sweet yellow tropical fruit" },
+          { "id": "opt-3", "label": "Rice", "emoji": "🍚", "description": "Wholesome kitchen grain" },
+          { "id": "opt-4", "label": "Tomato", "emoji": "🍅", "description": "Fresh salad ingredient" }
+        ],
+        "answer": "Apple",
+        "hint": "Observe the knuckle rotation against the cheek.",
+        "explanation": "In Indian & British sign language, twisting the knuckle at the cheek represents 'Apple'."
+      },
+      {
+        "id": "l2-2",
+        "title": "Marketplace Gratitude",
+        "subtitle": "Courteous checkout gesture",
+        "description": "Identify what polite phrase the customer gestures after the clerk hands over the grocery bag.",
+        "type": "multiple-choice",
+        "sigml": "SignFiles/thankyou.sigml",
+        "prompt": "What courteous phrase is the avatar signing at checkout?",
+        "options": ["Sorry", "Thank You", "Excuse Me", "Good Night"],
+        "answer": "Thank You",
+        "hint": "Flat fingers touching the chin or lips moving gently forward.",
+        "explanation": "Extending flat fingers from the lips forward is the universal sign for 'Thank You'."
+      }
+    ]
+  },
+  {
+    "id": "level-3",
+    "levelNumber": 3,
+    "title": "Level 3: Community & Family",
+    "description": "Master relational bonds and two-handed conversational dialogue.",
+    "isPremium": true,
+    "badge": "👑 Elite Signer",
+    "color": "#8b5cf6",
+    "accentColor": "#a78bfa",
+    "xpReward": 450,
+    "lessons": [
+      {
+        "id": "l3-1",
+        "title": "Lifelong Companions",
+        "subtitle": "Relational signs and companionship",
+        "description": "Observe how the two hands interact to represent social connections.",
+        "type": "multiple-choice",
+        "sigml": "SignFiles/friend.sigml",
+        "prompt": "Which social relationship is represented by these interlocking gestures?",
+        "options": ["Stranger", "Friend", "Co-worker", "Rival"],
+        "answer": "Friend",
+        "hint": "Two index fingers hooking together signifies a strong bond.",
+        "explanation": "Interlocking or hooking index fingers together denotes 'Friend'."
+      }
+    ]
+  }
+]

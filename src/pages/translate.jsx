@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import modulesData from '../modulesData.json';
 import { getSubscriptionStatus, deductCredits } from '../utils/subscriptionManager';
+import { playSiGMLFast } from '../utils/sigmlService';
 
 export default function Translate() {
   const [inputText, setInputText] = useState('');
@@ -14,9 +15,28 @@ export default function Translate() {
   const [subStatus, setSubStatus] = useState(getSubscriptionStatus());
   const [creditAlert, setCreditAlert] = useState('');
   
+  // Live Gloss and Sentence Sequence tracking
+  const [activeGlossItem, setActiveGlossItem] = useState(null);
+  const [activeTokenIndex, setActiveTokenIndex] = useState(-1);
+  const [activeSequence, setActiveSequence] = useState([]);
+  const [liveCWASAGloss, setLiveCWASAGloss] = useState('');
+  const [liveCWASASF, setLiveCWASASF] = useState('');
+
   const iframeRef = useRef(null);
   const recognitionRef = useRef(null);
   const finalTranscriptRef = useRef('');
+
+  // Listen for real-time CWASA gloss and frame broadcasts
+  useEffect(() => {
+    const handleMsg = (e) => {
+      if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
+        if (e.data.gloss) setLiveCWASAGloss(e.data.gloss);
+        if (e.data.signFrame) setLiveCWASASF(e.data.signFrame);
+      }
+    };
+    window.addEventListener('message', handleMsg);
+    return () => window.removeEventListener('message', handleMsg);
+  }, []);
 
   // Check Web Speech API support & sync subscription
   useEffect(() => {
@@ -28,7 +48,7 @@ export default function Translate() {
   }, []);
 
   // 1. High-Performance Flattened & Fast Lookup Hash Map for O(1) Dictionary Search
-  const { allWords, lookupMap } = useMemo(() => {
+  const { lookupMap } = useMemo(() => {
     const list = [];
     const map = new Map();
 
@@ -171,21 +191,20 @@ export default function Translate() {
       return;
     }
 
-    // Step C: Play sequence sequentially with zero latency
+    // Step C: Play sequence sequentially with zero latency & live gloss tracking
+    setActiveSequence(playSequence);
     for (let i = 0; i < playSequence.length; i++) {
       const item = playSequence[i];
+      setActiveTokenIndex(i);
+      setActiveGlossItem(item);
       setCurrentAction(`Playing [${i + 1}/${playSequence.length}]: ${item.label}`);
       
       if (iframeRef.current) {
-        try {
-          iframeRef.current.contentWindow.startPlayer(item.path);
-        } catch (err) {
-          console.log("Player error:", err);
-        }
+        playSiGMLFast(iframeRef.current, item.path, speedMultiplier);
       }
 
       // Base delay per gesture scaled by speed multiplier
-      const baseDelay = item.type === 'letter' ? 1700 : 3200; 
+      const baseDelay = item.type === 'letter' ? 1400 : 2600; 
       await sleep(baseDelay * speedMultiplier);
     }
 
@@ -536,7 +555,7 @@ export default function Translate() {
         )}
       </div>
 
-      {/* Right Panel: 3D Avatar Viewer */}
+      {/* Right Panel: 3D Avatar Viewer & Live Gloss Pipeline HUD */}
       <div 
         className="signverse-panel-right"
         style={{
@@ -549,6 +568,7 @@ export default function Translate() {
           overflow: 'hidden'
         }}
       >
+        {/* Avatar Viewport Frame (Upper section) */}
         <div 
           className="signverse-avatar-frame"
           style={{
@@ -558,7 +578,8 @@ export default function Translate() {
             position: 'relative',
             display: 'flex',
             justifyContent: 'center',
-            alignItems: 'center'
+            alignItems: 'center',
+            backgroundColor: '#e5e7eb'
           }}
         >
           <iframe 
@@ -573,6 +594,118 @@ export default function Translate() {
               display: 'block'
             }}
           />
+        </div>
+
+        {/* Right Panel BOTTOM Gloss & Pipeline HUD (Green Theme with Times New Roman) */}
+        <div
+          style={{
+            padding: '12px 20px',
+            background: 'linear-gradient(180deg, #052e16 0%, #14532d 100%)',
+            color: '#ffffff',
+            borderTop: '3px solid #22c55e',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            zIndex: 10,
+            boxShadow: '0 -4px 14px rgba(0,0,0,0.25)',
+            fontFamily: '"Times New Roman", Times, serif'
+          }}
+        >
+          {/* Active Gloss Line */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#86efac', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                LIVE GLOSS:
+              </span>
+              <span
+                style={{
+                  backgroundColor: 'rgba(34, 197, 94, 0.25)',
+                  color: '#4ade80',
+                  border: '1.5px solid #22c55e',
+                  padding: '4px 16px',
+                  borderRadius: '8px',
+                  fontSize: '19px',
+                  fontWeight: 'bold',
+                  letterSpacing: '1px',
+                  fontFamily: '"Times New Roman", Times, serif'
+                }}
+              >
+                {liveCWASAGloss || activeGlossItem?.label || 'READY'}
+              </span>
+              <span
+                style={{
+                  fontSize: '12px',
+                  backgroundColor: isPlaying ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                  color: isPlaying ? '#4ade80' : '#bbf7d0',
+                  border: isPlaying ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.2)',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontWeight: 'bold'
+                }}
+              >
+                {isPlaying ? '🟢 Signing...' : '⚪ Idle'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+              <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: '6px', color: '#dcfce7', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                Avatar: <strong style={{ color: '#ffffff' }}>Luna</strong>
+              </span>
+              <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: '6px', color: '#dcfce7', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                Speed: <strong style={{ color: '#ffffff' }}>{speedMultiplier}x</strong>
+              </span>
+              {liveCWASASF && (
+                <span style={{ backgroundColor: '#052e16', padding: '4px 10px', borderRadius: '6px', color: '#4ade80', fontFamily: 'monospace', fontWeight: 'bold', border: '1px solid #22c55e' }}>
+                  Frame: {liveCWASASF}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Sentence Sequence Token Strip */}
+          {activeSequence.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                gap: '6px',
+                overflowX: 'auto',
+                paddingTop: '2px',
+                scrollbarWidth: 'none'
+              }}
+            >
+              {activeSequence.map((tok, idx) => {
+                const isCurrent = idx === activeTokenIndex && isPlaying;
+                const isPast = idx < activeTokenIndex || (!isPlaying && activeTokenIndex === activeSequence.length - 1);
+                return (
+                  <span
+                    key={idx}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap',
+                      backgroundColor: isCurrent
+                        ? '#16a34a'
+                        : isPast
+                        ? 'rgba(34, 197, 94, 0.25)'
+                        : 'rgba(255,255,255,0.1)',
+                      color: isCurrent ? '#ffffff' : isPast ? '#86efac' : '#cbd5e1',
+                      border: isCurrent
+                        ? '1.5px solid #4ade80'
+                        : isPast
+                        ? '1px solid #22c55e'
+                        : '1px solid rgba(255,255,255,0.15)',
+                      boxShadow: isCurrent ? '0 0 10px #22c55e' : 'none',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {tok.label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

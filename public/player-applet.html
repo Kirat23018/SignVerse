@@ -139,12 +139,28 @@ function startPlayer(sigmlURL) {
 		});
 }
 
-// Global window message listener for cross-frame commands
-window.addEventListener("message", function(event) {
+// Global window message listener for cross-frame commands from React iframe
+window.addEventListener('message', function(event) {
 	if (!event || !event.data) return;
+	
+	if (event.data && event.data.type === 'PLAY_SIGML') {
+		const sigmlUrl = event.data.payload || event.data.file || event.data.url;
+		// CWASA specific call to play the file
+		if (typeof CWASA !== 'undefined') {
+			if (typeof startPlayer === 'function') {
+				startPlayer(sigmlUrl);
+			} else if (typeof CWASA.playSiGMLURL === 'function') {
+				CWASA.playSiGMLURL(sigmlUrl);
+			}
+		} else {
+			console.log("CWASA player not loaded yet. Target file:", sigmlUrl);
+		}
+		return;
+	}
+
 	var data = event.data;
 	if (typeof data === "object") {
-		if (data.type === "PLAY_SIGML" || data.type === "START_PLAYER") {
+		if (data.type === "START_PLAYER") {
 			var file = data.file || data.url || data.sigml;
 			if (file) startPlayer(file);
 		} else if (data.type === "STOP_PLAYER" || data.type === "STOP_SIGML") {
@@ -156,6 +172,28 @@ window.addEventListener("message", function(event) {
 		startPlayer(data);
 	}
 });
+
+// Real-time broadcast of live gloss & sign/frame details to parent React application
+var lastReportedGloss = "";
+var lastReportedSF = "";
+setInterval(function() {
+	var glossEl = document.querySelector(".txtGloss");
+	var sfEl = document.querySelector(".txtSF");
+	var currentGloss = glossEl ? (glossEl.value || "").trim() : "";
+	var currentSF = sfEl ? (sfEl.value || "").trim() : "";
+
+	if (currentGloss !== lastReportedGloss || currentSF !== lastReportedSF) {
+		lastReportedGloss = currentGloss;
+		lastReportedSF = currentSF;
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({
+				type: "CWASA_GLOSS_UPDATE",
+				gloss: currentGloss,
+				signFrame: currentSF
+			}, "*");
+		}
+	}
+}, 80);
 
 </script>
 

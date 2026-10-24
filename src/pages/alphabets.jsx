@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 // Static alphabet datasets defined outside component so they are never reallocated
 const DOUBLE_HANDED_LIST = Object.freeze(
@@ -61,8 +61,22 @@ export default function Alphabets() {
   const alphabetList = handMode === 'double' ? DOUBLE_HANDED_LIST : SINGLE_HANDED_LIST;
   const [activeItem, setActiveItem] = useState(alphabetList[0]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [liveGloss, setLiveGloss] = useState('');
+  const [liveFrame, setLiveFrame] = useState('');
   const iframeRef = useRef(null);
   const isIframeReady = useRef(false);
+
+  // Listen for real-time CWASA gloss and frame broadcasts
+  useEffect(() => {
+    const handleMsg = (e) => {
+      if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
+        if (e.data.gloss) setLiveGloss(e.data.gloss);
+        if (e.data.signFrame) setLiveFrame(e.data.signFrame);
+      }
+    };
+    window.addEventListener('message', handleMsg);
+    return () => window.removeEventListener('message', handleMsg);
+  }, []);
 
   // Play animation using cached text (fastest) or fallback to URL
   const playItem = useCallback(async (item) => {
@@ -168,7 +182,7 @@ export default function Alphabets() {
     const handleGlobalKeyDown = (e) => {
       // Ignore if user is typing in an input or textarea
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-      
+
       const char = e.key.toUpperCase();
       if (/^[A-Z]$/.test(char)) {
         e.preventDefault();
@@ -184,7 +198,7 @@ export default function Alphabets() {
   }, [alphabetList, selectAlphabet]);
 
   return (
-    <div 
+    <div
       className="signverse-split-container"
       style={{
         display: 'flex',
@@ -198,9 +212,9 @@ export default function Alphabets() {
       }}
     >
       {/* Left Panel: Grid of Alphabets */}
-      <div 
-        className="signverse-panel-left" 
-        style={{ 
+      <div
+        className="signverse-panel-left"
+        style={{
           width: '45%',
           height: '100%',
           padding: '26px 30px',
@@ -227,7 +241,7 @@ export default function Alphabets() {
           <p style={{ color: '#64748b', fontSize: '13.5px', marginBottom: '14px', textAlign: 'left', lineHeight: '1.4' }}>
             Click any alphabet or simply <strong>press any key (A–Z) on your keyboard</strong> to watch its 3D animation instantly.
           </p>
-          
+
           {/* Hand Mode Toggle */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
             <button
@@ -288,10 +302,10 @@ export default function Alphabets() {
                     }
                   }}
                   style={{
-                    padding: '14px 0', 
-                    fontSize: '18px', 
-                    fontWeight: '800', 
-                    borderRadius: '8px', 
+                    padding: '14px 0',
+                    fontSize: '18px',
+                    fontWeight: '800',
+                    borderRadius: '8px',
                     cursor: 'pointer',
                     border: isSelected ? '2px solid #4d7c0f' : '1px solid #e2e8f0',
                     backgroundColor: isSelected ? '#689f38' : '#ffffff',
@@ -319,7 +333,7 @@ export default function Alphabets() {
         </div>
 
         <div style={{ paddingTop: '14px' }}>
-          <button 
+          <button
             type="button"
             tabIndex={0}
             onClick={() => playItem(activeItem)}
@@ -328,7 +342,7 @@ export default function Alphabets() {
               padding: '14px',
               backgroundColor: isPlaying ? '#4d7c0f' : '#689f38',
               color: '#ffffff',
-              border: 'none', 
+              border: 'none',
               borderRadius: '8px',
               fontSize: '16px',
               fontWeight: '800',
@@ -345,8 +359,8 @@ export default function Alphabets() {
         </div>
       </div>
 
-      {/* Right Panel: Avatar Viewer */}
-      <div 
+      {/* Right Panel: Avatar Viewer with Bottom Gloss & Details HUD */}
+      <div
         className="signverse-panel-right"
         style={{
           width: '55%',
@@ -358,7 +372,8 @@ export default function Alphabets() {
           overflow: 'hidden'
         }}
       >
-        <div 
+        {/* Avatar Viewport Frame (Takes full upper area) */}
+        <div
           className="signverse-avatar-frame"
           style={{
             flex: 1,
@@ -367,12 +382,13 @@ export default function Alphabets() {
             position: 'relative',
             display: 'flex',
             justifyContent: 'center',
-            alignItems: 'center'
+            alignItems: 'center',
+            backgroundColor: '#e5e7eb'
           }}
         >
-          <iframe 
-            ref={iframeRef} 
-            src="/player-applet.html" 
+          <iframe
+            ref={iframeRef}
+            src="/player-applet.html"
             title="CWASA Avatar Player"
             className="signverse-avatar-iframe"
             style={{
@@ -383,6 +399,74 @@ export default function Alphabets() {
             }}
             onLoad={handleIframeLoad}
           />
+        </div>
+
+        {/* Right Panel BOTTOM Details & Gloss HUD (Green Theme with Times New Roman) */}
+        <div
+          style={{
+            padding: '12px 20px',
+            background: 'linear-gradient(180deg, #052e16 0%, #14532d 100%)',
+            color: '#ffffff',
+            borderTop: '3px solid #22c55e',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            zIndex: 10,
+            boxShadow: '0 -4px 14px rgba(0,0,0,0.25)',
+            fontFamily: '"Times New Roman", Times, serif'
+          }}
+        >
+          {/* Active Gloss Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#86efac', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              ACTIVE GLOSS:
+            </span>
+            <span
+              style={{
+                backgroundColor: 'rgba(34, 197, 94, 0.25)',
+                color: '#4ade80',
+                border: '1.5px solid #22c55e',
+                padding: '4px 16px',
+                borderRadius: '8px',
+                fontSize: '20px',
+                fontWeight: 'bold',
+                letterSpacing: '1px',
+                fontFamily: '"Times New Roman", Times, serif'
+              }}
+            >
+              {liveGloss || activeItem?.label || 'A'}
+            </span>
+            <span
+              style={{
+                fontSize: '12px',
+                backgroundColor: isPlaying ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                color: isPlaying ? '#4ade80' : '#bbf7d0',
+                border: isPlaying ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.2)',
+                padding: '4px 10px',
+                borderRadius: '12px',
+                fontWeight: 'bold'
+              }}
+            >
+              {isPlaying ? '🟢 Signing...' : '⚪ Ready'}
+            </span>
+          </div>
+
+          {/* Details Pill Strip */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+            <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '5px 12px', borderRadius: '6px', color: '#dcfce7', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+              Mode: <strong style={{ color: '#ffffff' }}>{handMode === 'double' ? 'ISL Double Hand' : 'Single Hand'}</strong>
+            </span>
+            <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '5px 12px', borderRadius: '6px', color: '#86efac', fontFamily: 'monospace', fontSize: '12px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+              {activeItem?.file}
+            </span>
+            {liveFrame && (
+              <span style={{ backgroundColor: '#052e16', padding: '5px 10px', borderRadius: '6px', color: '#4ade80', fontFamily: 'monospace', fontWeight: 'bold', border: '1px solid #22c55e' }}>
+                Frame: {liveFrame}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

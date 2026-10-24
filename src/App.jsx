@@ -12,6 +12,8 @@ import Dashboard from './pages/dashboard';
 import Pricing from './pages/pricing';
 import Login from './pages/login';
 import Signup from './pages/signup';
+import CoursePage from './pages/CoursePage';
+import LessonEngine from './components/LessonEngine';
 import AIChatBot from './components/AIChatBot';
 import { getSubscriptionStatus } from './utils/subscriptionManager';
 
@@ -82,6 +84,7 @@ function NavigationBar({ isAuthenticated, handleLogout }) {
             <Link to="/alphabets" style={linkStyle('/alphabets')}>Alphabets</Link>
             <Link to="/words" style={linkStyle('/words')}>Words</Link>
             <Link to="/translate" style={linkStyle('/translate')}>3D Translate</Link>
+            <Link to="/course" style={linkStyle('/course')}>Courses 🎯</Link>
             <Link to="/practice" style={linkStyle('/practice')}>Practice</Link>
             <Link to="/quiz" style={linkStyle('/quiz')}>Quiz</Link>
             <Link to="/dashboard" style={linkStyle('/dashboard')}>Dashboard</Link>
@@ -128,6 +131,7 @@ function NavigationBar({ isAuthenticated, handleLogout }) {
               <Link to="/alphabets" className={`signverse-nav-drawer-link ${isActive('/alphabets') ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>Alphabets (A-Z)</Link>
               <Link to="/words" className={`signverse-nav-drawer-link ${isActive('/words') ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>Sign Dictionary & Words</Link>
               <Link to="/translate" className={`signverse-nav-drawer-link ${isActive('/translate') ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>3D Translate (Voice & Text)</Link>
+              <Link to="/course" className={`signverse-nav-drawer-link ${isActive('/course') ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>Gamified Courses 🎯</Link>
               <Link to="/practice" className={`signverse-nav-drawer-link ${isActive('/practice') ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>Practice Studio</Link>
               <Link to="/quiz" className={`signverse-nav-drawer-link ${isActive('/quiz') ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>Interactive Quiz</Link>
               <Link to="/dashboard" className={`signverse-nav-drawer-link ${isActive('/dashboard') ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>Dashboard & Progress</Link>
@@ -198,6 +202,8 @@ export default function App() {
             <Route path="/alphabets" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Alphabets /></ProtectedRoute>} />
             <Route path="/words" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Words /></ProtectedRoute>} />
             <Route path="/translate" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Translate /></ProtectedRoute>} />
+            <Route path="/course" element={<ProtectedRoute isAuthenticated={isAuthenticated}><CoursePage /></ProtectedRoute>} />
+            <Route path="/course/:levelId" element={<ProtectedRoute isAuthenticated={isAuthenticated}><LessonEngine /></ProtectedRoute>} />
             <Route path="/practice" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Practice /></ProtectedRoute>} />
             <Route path="/quiz" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Quiz /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Dashboard /></ProtectedRoute>} />
