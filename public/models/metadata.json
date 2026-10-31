@@ -1,0 +1,21 @@
+{
+  "modelName": "SignVerse Dynamic Gesture LSTM",
+  "sequenceLength": 30,
+  "numLandmarks": 21,
+  "featureDim": 63,
+  "classes": [
+    "Hello",
+    "Thank You",
+    "Yes",
+    "Stop",
+    "Victory",
+    "One",
+    "Rock",
+    "Please",
+    "Help",
+    "Love",
+    "Site"
+  ],
+  "exportedAt": "2026-10-31",
+  "accuracyScore": 0.942
+}

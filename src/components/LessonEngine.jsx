@@ -309,7 +309,7 @@ export default function LessonEngine({
             <div style={{ borderRight: '1px solid #cbd5e1' }} />
             <div>
               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '600' }}>MASTERY</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#3b82f6' }}>100%</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#10b981' }}>100%</div>
             </div>
           </div>
 
@@ -332,7 +332,7 @@ export default function LessonEngine({
             <button
               onClick={handleBack}
               style={{
-                backgroundColor: '#2563eb',
+                backgroundColor: '#10b981',
                 border: 'none',
                 padding: '12px 28px',
                 borderRadius: '12px',
@@ -340,7 +340,7 @@ export default function LessonEngine({
                 fontWeight: '700',
                 color: '#ffffff',
                 cursor: 'pointer',
-                boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.4)'
+                boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.4)'
               }}
             >
               🚀 Continue on Roadmap
@@ -531,19 +531,19 @@ export default function LessonEngine({
                           border: placed
                             ? lessonStatus === 'correct'
                               ? '3px solid #10b981'
-                              : '3px solid #3b82f6'
+                              : '3px solid #10b981'
                             : '2px dashed #94a3b8',
                           backgroundColor: placed
                             ? lessonStatus === 'correct'
                               ? '#dcfce7'
-                              : '#eff6ff'
+                              : '#ecfdf5'
                             : '#f8fafc',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: '28px',
                           fontWeight: '800',
-                          color: lessonStatus === 'correct' ? '#15803d' : '#1d4ed8',
+                          color: lessonStatus === 'correct' ? '#15803d' : '#065f46',
                           cursor: placed ? 'pointer' : 'default',
                           userSelect: 'none',
                           boxShadow: placed ? '0 4px 6px -1px rgba(0,0,0,0.08)' : 'none',
@@ -735,7 +735,7 @@ export default function LessonEngine({
                 onClick={handleNextLesson}
                 disabled={lessonStatus !== 'correct'}
                 style={{
-                  backgroundColor: lessonStatus === 'correct' ? '#2563eb' : '#94a3b8',
+                  backgroundColor: lessonStatus === 'correct' ? '#10b981' : '#94a3b8',
                   color: '#ffffff',
                   border: 'none',
                   padding: '12px 28px',

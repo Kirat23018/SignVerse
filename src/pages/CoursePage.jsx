@@ -156,7 +156,7 @@ export default function CoursePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span
                 style={{
-                  backgroundColor: activeLevel.color || '#3b82f6',
+                  backgroundColor: activeLevel.color || '#10b981',
                   color: '#ffffff',
                   fontSize: '11px',
                   fontWeight: '800',

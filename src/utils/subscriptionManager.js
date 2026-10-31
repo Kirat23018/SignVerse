@@ -121,11 +121,35 @@ export function upgradeSubscription(planType) {
 }
 
 /**
+ * Check if the user has unlocked Pro features or courses
+ */
+export function isProUnlocked() {
+  const status = getSubscriptionStatus();
+  if (status.isPaidPlan) return true;
+  return localStorage.getItem('signverse_pro_unlocked') === 'true';
+}
+
+/**
+ * Unlock Pro Course Subscription (e.g. ₹199/month or ₹1499/year)
+ */
+export function unlockProCourseSubscription(planDetails = 'Pro Tier (₹199/mo)') {
+  localStorage.setItem(STORAGE_KEYS.PLAN, planDetails);
+  localStorage.setItem('signverse_pro_unlocked', 'true');
+  localStorage.setItem(STORAGE_KEYS.CREDITS, '9999');
+  const expiryDate = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION_EXPIRY, expiryDate.toString());
+  window.dispatchEvent(new CustomEvent('signverse_subscription_updated'));
+  return getSubscriptionStatus();
+}
+
+/**
  * Reset Free Trial (Useful for testing)
  */
 export function resetFreeTrial() {
   localStorage.setItem(STORAGE_KEYS.TRIAL_START, Date.now().toString());
   localStorage.setItem(STORAGE_KEYS.PLAN, 'Free Trial (3 Days)');
   localStorage.setItem(STORAGE_KEYS.CREDITS, DEFAULT_TRIAL_CREDITS.toString());
+  localStorage.removeItem('signverse_pro_unlocked');
+  window.dispatchEvent(new CustomEvent('signverse_subscription_updated'));
   return getSubscriptionStatus();
 }

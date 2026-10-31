@@ -133,7 +133,7 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
             onClick={handleReplay}
             disabled={isPlaying}
             style={{
-              backgroundColor: '#3b82f6',
+              backgroundColor: '#10b981',
               color: '#ffffff',
               border: 'none',
               padding: '5px 12px',
@@ -145,6 +145,7 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
               transition: 'background 0.2s'
             }}
           >
@@ -182,13 +183,13 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
             style={{
               position: 'absolute',
               inset: 0,
-              backgroundColor: '#0f172a',
+              backgroundColor: '#0a100d',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '12px',
-              color: '#94a3b8'
+              color: '#94a39b'
             }}
           >
             <div
@@ -196,7 +197,7 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
                 width: '32px',
                 height: '32px',
                 border: '3px solid rgba(255, 255, 255, 0.1)',
-                borderTopColor: '#38bdf8',
+                borderTopColor: '#10b981',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite'
               }}

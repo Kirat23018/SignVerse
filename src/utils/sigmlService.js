@@ -62,7 +62,7 @@ export async function fetchAndCacheSiGML(filePath) {
       sigmlMemoryCache.set(normalizedPath, sanitized);
       return sanitized;
     }
-  } catch (err) {
+  } catch {
     // Non-blocking fallback
   }
   return null;
@@ -86,7 +86,7 @@ export async function playSiGMLFast(iframeElement, fileOrItem, speedMultiplier =
         cw.postMessage({ type: 'PLAY_TEXT', text: cachedText, file: path, payload: path, speed: speedMultiplier }, '*');
       }
       return true;
-    } catch (e) {
+    } catch {
       cw.postMessage({ type: 'PLAY_TEXT', text: cachedText, file: path, payload: path, speed: speedMultiplier }, '*');
       return true;
     }
@@ -99,7 +99,7 @@ export async function playSiGMLFast(iframeElement, fileOrItem, speedMultiplier =
     } else {
       cw.postMessage({ type: 'PLAY_SIGML', file: path, payload: path, speed: speedMultiplier }, '*');
     }
-  } catch (e) {
+  } catch {
     cw.postMessage({ type: 'PLAY_SIGML', file: path, payload: path, speed: speedMultiplier }, '*');
   }
 

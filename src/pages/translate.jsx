@@ -344,11 +344,23 @@ export default function Translate() {
             </h2>
           </div>
 
-          <Link to="/pricing" style={{ textDecoration: 'none' }}>
-            <span style={{ fontSize: '12px', backgroundColor: '#f1f5f9', color: '#334155', padding: '4px 10px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
-              {subStatus.isPaidPlan ? '✨ Pro (Unlimited)' : `🪙 ${subStatus.credits} Credits • ${subStatus.trialDaysRemaining}d Trial`}
-            </span>
-          </Link>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <Link to="/text-to-sign" style={{ textDecoration: 'none' }}>
+              <span style={{ fontSize: '12px', background: 'rgba(255, 255, 255, 0.08)', color: '#0f172a', padding: '5px 12px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
+                🗣️ Hub
+              </span>
+            </Link>
+            <Link to="/sign-to-text" style={{ textDecoration: 'none' }}>
+              <span style={{ fontSize: '12px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#ffffff', padding: '5px 12px', borderRadius: '14px', fontWeight: '700', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)' }}>
+                📷 Sign-to-Text Mode
+              </span>
+            </Link>
+            <Link to="/pricing" style={{ textDecoration: 'none' }}>
+              <span style={{ fontSize: '12px', backgroundColor: '#f1f5f9', color: '#334155', padding: '4px 10px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
+                {subStatus.isPaidPlan ? '✨ Pro (Unlimited)' : `🪙 ${subStatus.credits} Credits • ${subStatus.trialDaysRemaining}d Trial`}
+              </span>
+            </Link>
+          </div>
         </div>
         
         <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '14px', lineHeight: '1.4' }}>

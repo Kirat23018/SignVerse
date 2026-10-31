@@ -387,12 +387,12 @@ export default function Quiz() {
                   key={num}
                   onClick={() => startQuiz(num)}
                   style={{
-                    padding: '14px', backgroundColor: '#f8fafc', border: '2px solid #38bdf8', 
-                    borderRadius: '10px', fontSize: '16px', fontWeight: '800', color: '#003366',
+                    padding: '14px', backgroundColor: '#f8fafc', border: '2px solid #10b981', 
+                    borderRadius: '10px', fontSize: '16px', fontWeight: '800', color: '#064e3b',
                     cursor: 'pointer', transition: 'all 0.15s ease', outline: 'none',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px'
                   }}
-                  onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#e0f2fe'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                  onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#ecfdf5'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                   onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.transform = 'translateY(0)'; }}
                 >
                   <span>{num} Questions</span>
@@ -604,7 +604,7 @@ export default function Quiz() {
                 style={{
                   width: '100%',
                   padding: '14px',
-                  backgroundColor: attempts >= selectedTotal ? '#0284c7' : '#16a34a',
+                  backgroundColor: attempts >= selectedTotal ? '#059669' : '#16a34a',
                   color: 'white',
                   border: 'none',
                   borderRadius: '10px',

@@ -23,7 +23,7 @@ export default function ProgressBar({ currentStep = 0, totalSteps = 1, showLabel
           }}
         >
           <span>LESSON PROGRESS</span>
-          <span style={{ color: '#2563eb' }}>
+          <span style={{ color: '#10b981' }}>
             {currentStep} / {totalSteps} Completed ({Math.round(progressPercent)}%)
           </span>
         </div>
@@ -50,7 +50,7 @@ export default function ProgressBar({ currentStep = 0, totalSteps = 1, showLabel
           style={{
             width: `${progressPercent}%`,
             height: '100%',
-            background: 'linear-gradient(to right, #10b981, #3b82f6)',
+            background: 'linear-gradient(to right, #10b981, #059669)',
             borderRadius: '9999px',
             transition: 'width 0.4s ease',
             boxShadow: progressPercent > 0 ? '0 1px 3px rgba(16, 185, 129, 0.4)' : 'none'

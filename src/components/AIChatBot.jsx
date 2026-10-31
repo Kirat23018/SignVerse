@@ -8,7 +8,7 @@ export default function AIChatBot() {
     {
       id: 1,
       sender: 'bot',
-      text: "👋 Hi! I'm **SignBot AI**, your 24/7 ultra-fast assistant.\n\nAsk me **ANY question** — from 3D sign translations, deaf culture, and platform shortcuts to science, coding, and general knowledge! ⚡",
+      text: "👋 Hi! I'm **SignBot AI**, your calming, 24/7 assistant.\n\nAsk me **ANY question** — from 3D sign translations, deaf culture, and platform shortcuts to science, coding, and general knowledge! 🌿",
       action: null,
       provider: 'Groq AI ⚡',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -19,7 +19,6 @@ export default function AIChatBot() {
   const [isListening, setIsListening] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isSpeechPaused, setIsSpeechPaused] = useState(false);
   const [currentSpeakingId, setCurrentSpeakingId] = useState(null);
   const [hasUnread, setHasUnread] = useState(false);
   
@@ -44,7 +43,6 @@ export default function AIChatBot() {
     }
   }, [messages, isOpen, isTyping]);
 
-  // Clean up speech on unmount or window close
   useEffect(() => {
     return () => {
       if ('speechSynthesis' in window) {
@@ -53,139 +51,64 @@ export default function AIChatBot() {
     };
   }, []);
 
-  // Stop / Cancel all active speech
   const stopSpeech = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
-      setIsSpeechPaused(false);
       setCurrentSpeakingId(null);
     }
   };
 
-  // Pause speech
-  const pauseSpeech = () => {
-    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
-      window.speechSynthesis.pause();
-      setIsSpeechPaused(true);
-    }
-  };
-
-  // Resume speech
-  const resumeSpeech = () => {
-    if ('speechSynthesis' in window && window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-      setIsSpeechPaused(false);
-    }
-  };
-
-  // Text to Speech
   const speakText = (text, messageId = null) => {
     if (!('speechSynthesis' in window)) return;
-    
-    // If currently speaking this same message, toggle stop
+
     if (isSpeaking && currentSpeakingId === messageId) {
       stopSpeech();
       return;
     }
 
-    try {
-      window.speechSynthesis.cancel();
-      const cleanText = text.replace(/[*#`_•]/g, '').replace(/👉.*$/, '').replace(/\[\[ACTION:.*?\]\]/g, '');
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
+    stopSpeech();
 
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-        setIsSpeechPaused(false);
-        setCurrentSpeakingId(messageId);
-      };
+    const clean = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/`(.*?)`/g, '$1')
+      .replace(/###\s+/g, '')
+      .replace(/[-•]\s+/g, '')
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
 
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        setIsSpeechPaused(false);
-        setCurrentSpeakingId(null);
-      };
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
 
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        setIsSpeechPaused(false);
-        setCurrentSpeakingId(null);
-      };
+    const voices = window.speechSynthesis.getVoices();
+    const naturalVoice = voices.find(v => v.lang.includes('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha')));
+    if (naturalVoice) utterance.voice = naturalVoice;
 
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.log('TTS error', e);
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setIsSpeechPaused(false);
+      setCurrentSpeakingId(messageId);
+    };
+
+    utterance.onend = () => {
       setIsSpeaking(false);
       setIsSpeechPaused(false);
       setCurrentSpeakingId(null);
-    }
-  };
-
-  // Handle Send Message (Real-Time Async LLM)
-  const handleSend = async (textToSend) => {
-    const text = (typeof textToSend === 'string' ? textToSend : inputText).trim();
-    if (!text || isTyping) return;
-
-    // Stop any active speech before generating new response
-    stopSpeech();
-
-    const userMessage = {
-      id: Date.now(),
-      sender: 'user',
-      text: text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInputText('');
-    setIsTyping(true);
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setIsSpeechPaused(false);
+      setCurrentSpeakingId(null);
+    };
 
-    try {
-      const botReply = await askGeminiRealtime(text, messages, apiKeyInput || null);
-      const newBotId = Date.now() + 1;
-
-      const botMessage = {
-        id: newBotId,
-        sender: 'bot',
-        text: botReply.text,
-        action: botReply.action,
-        isRealtimeAI: botReply.isRealtimeAI,
-        provider: botReply.provider,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setMessages((prev) => [...prev, botMessage]);
-      setIsTyping(false);
-
-      if (!isOpen) {
-        setHasUnread(true);
-      }
-
-      if (ttsEnabled) {
-        speakText(botReply.text, newBotId);
-      }
-    } catch (err) {
-      console.error('Chat error:', err);
-      setIsTyping(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: "I encountered a momentary connection issue. Please try asking again!",
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
-    }
+    window.speechSynthesis.speak(utterance);
   };
 
-  // Voice Input for Chatbot
   const toggleVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+      alert("Voice input is not supported in this browser. Please use Chrome or Edge.");
       return;
     }
 
@@ -195,76 +118,105 @@ export default function AIChatBot() {
       return;
     }
 
-    // Stop AI speech if user starts speaking
-    stopSpeech();
-
     try {
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-US';
-      recognition.continuous = false;
       recognition.interimResults = false;
-      recognitionRef.current = recognition;
+      recognition.maxAlternatives = 1;
 
-      recognition.onstart = () => setIsListening(true);
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setInputText(transcript);
-          handleSend(transcript);
-        }
+        setInputText(transcript);
+        handleSend(transcript);
       };
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
 
+      recognition.onerror = (event) => {
+        console.error("Speech Recognition Error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
       recognition.start();
-    } catch (err) {
+    } catch (e) {
+      console.error(e);
       setIsListening(false);
     }
   };
 
-  // Save Groq or Gemini API Key
-  const handleSaveApiKey = () => {
-    const key = apiKeyInput.trim();
-    if (key) {
-      if (key.startsWith('gsk_')) {
-        localStorage.setItem('groq_api_key', key);
-        localStorage.removeItem('gemini_api_key');
-      } else {
-        localStorage.setItem('gemini_api_key', key);
-        localStorage.removeItem('groq_api_key');
+  const handleSend = async (customPrompt = null) => {
+    const query = (customPrompt || inputText).trim();
+    if (!query || isTyping) return;
+
+    const userMsg = {
+      id: Date.now(),
+      sender: 'user',
+      text: query,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    if (!customPrompt) setInputText('');
+    setIsTyping(true);
+
+    try {
+      const history = messages.slice(-6).map((m) => ({
+        role: m.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: m.text }]
+      }));
+
+      const response = await askGeminiRealtime(query, history);
+
+      const botMsg = {
+        id: Date.now() + 1,
+        sender: 'bot',
+        text: response.text,
+        action: response.action,
+        provider: response.provider || 'Groq AI ⚡',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setMessages((prev) => [...prev, botMsg]);
+
+      if (ttsEnabled) {
+        speakText(response.text, botMsg.id);
       }
-      setIsKeySaved(true);
-      setShowSettings(false);
-      const providerName = key.startsWith('gsk_') ? 'Groq Llama-3.3 70B' : 'Google Gemini AI';
+
+      if (!isOpen) {
+        setHasUnread(true);
+      }
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now(),
+          id: Date.now() + 1,
           sender: 'bot',
-          text: `🎉 **${providerName} Connected Successfully!**\n\nI can now answer ANY question in real-time with ultra-fast AI intelligence.`,
+          text: "I experienced a minor connection hiccup. Please ask again!",
+          provider: 'Offline Recovery',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
-    } else {
-      localStorage.removeItem('groq_api_key');
-      localStorage.removeItem('gemini_api_key');
-      setIsKeySaved(false);
-      setShowSettings(false);
+    } finally {
+      setIsTyping(false);
     }
   };
 
-  // Clear Chat History
-  const clearChat = () => {
-    stopSpeech();
-    setMessages([
-      {
-        id: Date.now(),
-        sender: 'bot',
-        text: "✨ Chat cleared! Ask me anything about **SignVerse** or the universe.",
-        action: null,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }
-    ]);
+  const handleSaveApiKey = () => {
+    const trimmed = apiKeyInput.trim();
+    if (trimmed.startsWith('gsk_')) {
+      localStorage.setItem('groq_api_key', trimmed);
+    } else {
+      localStorage.setItem('gemini_api_key', trimmed);
+    }
+    setIsKeySaved(!!trimmed);
+    setShowSettings(false);
   };
 
   // Modern Formatted Markdown Renderer
@@ -274,21 +226,21 @@ export default function AIChatBot() {
       const parts = line.split(/(\*\*.*?\*\*)/g);
       const formattedLine = parts.map((part, partIdx) => {
         if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={partIdx} style={{ color: '#1e1b4b', fontWeight: '700' }}>{part.slice(2, -2)}</strong>;
+          return <strong key={partIdx} style={{ color: '#7CA992', fontWeight: '700' }}>{part.slice(2, -2)}</strong>;
         }
         if (part.startsWith('`') && part.endsWith('`')) {
-          return <code key={partIdx} style={{ backgroundColor: '#ede9fe', color: '#6b21a8', padding: '2px 5px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>{part.slice(1, -1)}</code>;
+          return <code key={partIdx} style={{ backgroundColor: 'rgba(124, 169, 146, 0.15)', color: '#7CA992', padding: '2px 5px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>{part.slice(1, -1)}</code>;
         }
         return part;
       });
 
       if (line.startsWith('### ')) {
-        return <h4 key={lineIdx} style={{ margin: '10px 0 4px 0', color: '#4338ca', fontSize: '14.5px', fontWeight: '700' }}>{line.replace('### ', '')}</h4>;
+        return <h4 key={lineIdx} style={{ margin: '10px 0 4px 0', color: '#7CA992', fontSize: '14.5px', fontWeight: '700' }}>{line.replace('### ', '')}</h4>;
       }
       if (line.startsWith('- ') || line.startsWith('• ')) {
         return (
           <div key={lineIdx} style={{ display: 'flex', gap: '8px', margin: '3px 0 3px 6px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>•</span>
+            <span style={{ color: '#7CA992', fontWeight: 'bold' }}>•</span>
             <div style={{ flex: 1 }}>{formattedLine}</div>
           </div>
         );
@@ -299,7 +251,7 @@ export default function AIChatBot() {
 
   return (
     <>
-      {/* 1. Eye-Catching Futuristic Floating Trigger Button (Bottom-Right) */}
+      {/* 1. Floating Trigger Button (Bottom-Right) */}
       <div 
         className="signverse-chat-trigger-container"
         style={{ 
@@ -316,73 +268,55 @@ export default function AIChatBot() {
           className="signverse-chat-trigger-btn"
           style={{
             position: 'relative',
-            background: isOpen 
-              ? 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)' 
-              : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #ec4899 100%)',
-            color: 'white',
-            border: '2px solid rgba(255, 255, 255, 0.35)',
+            background: isOpen ? '#242A27' : '#7CA992',
+            color: isOpen ? '#E4EAE6' : '#191C1A',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
             borderRadius: '50px',
             padding: isOpen ? '12px 20px' : '10px 22px 10px 14px',
-            fontSize: '15px',
+            fontSize: '14.5px',
             fontWeight: '700',
             cursor: 'pointer',
-            boxShadow: isOpen 
-              ? '0 8px 24px rgba(30, 27, 75, 0.4)'
-              : '0 10px 30px rgba(124, 58, 237, 0.5), 0 0 20px rgba(236, 72, 153, 0.3)',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            transition: 'all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-            backdropFilter: 'blur(10px)',
-            transform: 'scale(1)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-3px) scale(1.04)';
-            e.currentTarget.style.boxShadow = '0 14px 38px rgba(124, 58, 237, 0.65), 0 0 25px rgba(236, 72, 153, 0.45)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = isOpen 
-              ? '0 8px 24px rgba(30, 27, 75, 0.4)'
-              : '0 10px 30px rgba(124, 58, 237, 0.5), 0 0 20px rgba(236, 72, 153, 0.3)';
+            transition: 'all 0.25s ease',
+            backdropFilter: 'blur(10px)'
           }}
         >
-          {/* Animated Glowing Orb Avatar */}
+          {/* Avatar Icon */}
           <div style={{
-            width: '38px', height: '38px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #ffffff 0%, #e0e7ff 100%)',
+            width: '36px', height: '36px', borderRadius: '50%',
+            background: isOpen ? 'rgba(255, 255, 255, 0.08)' : '#191C1A',
+            color: isOpen ? '#E4EAE6' : '#7CA992',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 12px rgba(255, 255, 255, 0.8)',
-            position: 'relative', overflow: 'visible', flexShrink: 0
+            position: 'relative', flexShrink: 0
           }}>
-            <span style={{ fontSize: '20px', animation: 'floatOrb 2.5s ease-in-out infinite' }}>
-              {isOpen ? '✕' : '✨'}
+            <span style={{ fontSize: '18px' }}>
+              {isOpen ? '✕' : '🌿'}
             </span>
             
-            {/* Live Online Green Halo */}
             <span style={{
-              position: 'absolute', bottom: '-1px', right: '-1px', width: '11px', height: '11px',
-              backgroundColor: '#10b981', borderRadius: '50%', border: '2px solid #ffffff',
-              boxShadow: '0 0 8px #10b981'
+              position: 'absolute', bottom: '-1px', right: '-1px', width: '10px', height: '10px',
+              backgroundColor: '#7CA992', borderRadius: '50%', border: '2px solid #242A27'
             }} />
           </div>
 
           <div className="signverse-chat-trigger-text" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <span style={{ letterSpacing: '0.3px', textShadow: '0 1px 3px rgba(0,0,0,0.2)' }}>
-              {isOpen ? 'Close Assistant' : 'Ask SignAI ⚡'}
+            <span style={{ letterSpacing: '0.3px' }}>
+              {isOpen ? 'Close Assistant' : 'Ask SignAI 🌿'}
             </span>
             {!isOpen && (
-              <span style={{ fontSize: '10.5px', opacity: 0.9, fontWeight: '500', color: '#fdf2f8' }}>
-                Real-Time LLM Assistant
+              <span style={{ fontSize: '10.5px', opacity: 0.85, fontWeight: '500' }}>
+                Soothing Assistant
               </span>
             )}
           </div>
 
           {hasUnread && !isOpen && (
             <span style={{
-              position: 'absolute', top: '-4px', right: '-4px', width: '14px', height: '14px',
-              backgroundColor: '#ef4444', borderRadius: '50%', border: '2px solid white',
-              boxShadow: '0 0 10px #ef4444', animation: 'pulseDot 1.2s infinite'
+              position: 'absolute', top: '-4px', right: '-4px', width: '12px', height: '12px',
+              backgroundColor: '#7CA992', borderRadius: '50%', border: '2px solid #191C1A'
             }} />
           )}
         </button>
@@ -390,52 +324,65 @@ export default function AIChatBot() {
 
       {/* 2. Floating AI Chatbot Window */}
       {isOpen && (
-        <div className="signverse-chat-window">
-          {/* Futuristic Cosmic Header */}
+        <div 
+          className="signverse-chat-window"
+          style={{
+            position: 'fixed',
+            bottom: '88px',
+            right: '24px',
+            width: '380px',
+            maxWidth: 'calc(100vw - 48px)',
+            height: '560px',
+            maxHeight: 'calc(100vh - 120px)',
+            borderRadius: '20px',
+            overflow: 'hidden',
+            backgroundColor: '#242A27',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            zIndex: 9999
+          }}
+        >
+          {/* Header */}
           <div style={{
-            background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)',
-            color: 'white', padding: '16px 20px',
+            background: '#191C1A',
+            color: '#E4EAE6', padding: '16px 20px',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: '2px solid rgba(139, 92, 246, 0.4)',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{
-                width: '42px', height: '42px',
+                width: '38px', height: '38px',
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
+                background: 'rgba(124, 169, 146, 0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 0 16px rgba(168, 85, 247, 0.6)',
-                border: '2px solid rgba(255, 255, 255, 0.4)',
-                fontSize: '20px', flexShrink: 0
+                border: '1px solid rgba(124, 169, 146, 0.3)',
+                fontSize: '18px', flexShrink: 0
               }}>
                 🤖
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', letterSpacing: '0.3px' }}>SignBot Real-Time AI</h3>
-                  <span style={{ fontSize: '10px', backgroundColor: '#4f46e5', color: '#e0e7ff', padding: '2px 6px', borderRadius: '8px', fontWeight: '700' }}>v2.5</span>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#E4EAE6' }}>SignBot AI</h3>
+                  <span style={{ fontSize: '10px', backgroundColor: '#7CA992', color: '#191C1A', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>v2.5</span>
                 </div>
-                <span style={{ fontSize: '11.5px', color: '#c7d2fe', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
-                  <span style={{ width: '7px', height: '7px', backgroundColor: isKeySaved ? '#10b981' : '#f59e0b', borderRadius: '50%', boxShadow: isKeySaved ? '0 0 6px #10b981' : 'none' }} />
-                  {isKeySaved ? (apiKeyInput.startsWith('gsk_') ? 'Groq Llama-3.3 70B Active ⚡' : 'Gemini 1.5 Flash Active ⚡') : 'Smart Local Mode'}
+                <span style={{ fontSize: '11px', color: '#9CAEA4', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+                  <span style={{ width: '7px', height: '7px', backgroundColor: '#7CA992', borderRadius: '50%' }} />
+                  {isKeySaved ? 'Groq / Gemini Active' : 'Online Mode'}
                 </span>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              {/* Settings / API Key */}
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 title="AI Settings & API Key"
-                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'white', fontSize: '15px', cursor: 'pointer', padding: '6px 8px', transition: 'background 0.2s' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '8px', color: '#E4EAE6', fontSize: '14px', cursor: 'pointer', padding: '6px 8px' }}
               >
                 ⚙️
               </button>
 
-              {/* Audio TTS Auto-Read Toggle */}
               <button
                 onClick={() => {
                   if (ttsEnabled) {
@@ -447,105 +394,45 @@ export default function AIChatBot() {
                 }}
                 title={ttsEnabled ? 'Mute Auto Voice' : 'Enable Auto Voice Audio'}
                 style={{
-                  background: ttsEnabled ? 'rgba(99, 102, 241, 0.5)' : 'rgba(255,255,255,0.1)',
-                  border: ttsEnabled ? '1px solid #a855f7' : 'none', borderRadius: '8px', color: 'white', fontSize: '15px',
-                  cursor: 'pointer', padding: '6px 8px', transition: 'background 0.2s'
+                  background: ttsEnabled ? '#7CA992' : 'rgba(255,255,255,0.06)',
+                  border: 'none', borderRadius: '8px',
+                  color: ttsEnabled ? '#191C1A' : '#E4EAE6',
+                  fontSize: '14px', cursor: 'pointer', padding: '6px 8px'
                 }}
               >
                 {ttsEnabled ? '🔊' : '🔇'}
               </button>
 
-              {/* Clear Chat */}
-              <button
-                onClick={clearChat}
-                title="Clear Conversation"
-                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'white', fontSize: '15px', cursor: 'pointer', padding: '6px 8px' }}
-              >
-                🗑️
-              </button>
-
-              {/* Close Window */}
               <button
                 onClick={() => {
                   stopSpeech();
                   setIsOpen(false);
                 }}
-                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'white', fontSize: '16px', cursor: 'pointer', padding: '6px 8px' }}
+                style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '8px', color: '#9CAEA4', fontSize: '14px', cursor: 'pointer', padding: '6px 8px' }}
               >
                 ✕
               </button>
             </div>
           </div>
 
-          {/* Active Audio Playback Controller Bar (Displayed when AI is speaking) */}
-          {isSpeaking && (
-            <div style={{
-              background: 'linear-gradient(135deg, #ede9fe 0%, #fae8ff 100%)',
-              borderBottom: '1.5px solid #d8b4fe', padding: '8px 16px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              animation: 'fadeIn 0.25s ease-out', boxShadow: '0 2px 8px rgba(168, 85, 247, 0.15)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px', animation: 'waveSpeech 1s infinite' }}>🗣️</span>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#6b21a8' }}>
-                    {isSpeechPaused ? 'Speech Paused' : 'AI Reading Aloud...'}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                {/* Pause / Resume Button */}
-                <button
-                  onClick={isSpeechPaused ? resumeSpeech : pauseSpeech}
-                  title={isSpeechPaused ? "Resume Reading" : "Pause Reading"}
-                  style={{
-                    backgroundColor: '#ffffff', color: '#6b21a8', border: '1px solid #c084fc',
-                    borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', fontWeight: '700',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                  }}
-                >
-                  {isSpeechPaused ? '▶️ Resume' : '⏸️ Pause'}
-                </button>
-
-                {/* Stop Speech Button */}
-                <button
-                  onClick={stopSpeech}
-                  title="Stop Audio Speech"
-                  style={{
-                    backgroundColor: '#ef4444', color: '#ffffff', border: 'none',
-                    borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', fontWeight: '700',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                    boxShadow: '0 2px 6px rgba(239, 68, 68, 0.3)'
-                  }}
-                >
-                  ⏹️ Stop Speech
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Settings Modal (API Key configuration) */}
           {showSettings && (
-            <div style={{ backgroundColor: '#f8fafc', padding: '14px 18px', borderBottom: '1px solid #e2e8f0', animation: 'fadeIn 0.25s' }}>
+            <div style={{ backgroundColor: '#191C1A', padding: '14px 18px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e1b4b' }}>⚙️ Connected AI Provider</span>
-                <button onClick={() => setShowSettings(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#64748b' }}>Close</button>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#E4EAE6' }}>⚙️ Connected AI Provider</span>
+                <button onClick={() => setShowSettings(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#9CAEA4' }}>Close</button>
               </div>
-              <p style={{ margin: '0 0 8px 0', fontSize: '11.5px', color: '#475569', lineHeight: '1.4' }}>
-                Supports ultra-fast <strong>Groq API Keys</strong> (<a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ color: '#6366f1', fontWeight: 'bold' }}>console.groq.com</a>) and <strong>Gemini Keys</strong>.
-              </p>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
                   placeholder="Paste Groq or Gemini Key..."
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  style={{ flex: 1, padding: '7px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px', outline: 'none' }}
+                  style={{ flex: 1, padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)', background: '#242A27', color: '#E4EAE6', fontSize: '12px', outline: 'none' }}
                 />
                 <button
                   onClick={handleSaveApiKey}
-                  style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', color: 'white', border: 'none', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                  style={{ background: '#7CA992', color: '#191C1A', border: 'none', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   Save
                 </button>
@@ -555,7 +442,7 @@ export default function AIChatBot() {
 
           {/* Quick Suggestion Pills */}
           <div style={{
-            backgroundColor: '#f8fafc', padding: '8px 12px', borderBottom: '1px solid #edf2f7',
+            backgroundColor: '#191C1A', padding: '8px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex', gap: '6px', overflowX: 'auto', whiteSpace: 'nowrap', scrollbarWidth: 'none'
           }}>
             {QUICK_SUGGESTIONS.map((suggestion, idx) => (
@@ -563,20 +450,9 @@ export default function AIChatBot() {
                 key={idx}
                 onClick={() => handleSend(suggestion)}
                 style={{
-                  backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px',
-                  padding: '5px 12px', fontSize: '11.5px', color: '#4338ca', cursor: 'pointer',
-                  fontWeight: '600', transition: 'all 0.2s', flexShrink: 0,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ede9fe';
-                  e.currentTarget.style.borderColor = '#8b5cf6';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ffffff';
-                  e.currentTarget.style.borderColor = '#e2e8f0';
-                  e.currentTarget.style.transform = 'translateY(0)';
+                  backgroundColor: '#242A27', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px',
+                  padding: '5px 12px', fontSize: '11.5px', color: '#E4EAE6', cursor: 'pointer',
+                  fontWeight: '600', flexShrink: 0
                 }}
               >
                 {suggestion}
@@ -586,104 +462,68 @@ export default function AIChatBot() {
 
           {/* Messages Container */}
           <div style={{
-            flex: 1, padding: '16px', overflowY: 'auto', backgroundColor: '#f8fafc',
+            flex: 1, padding: '16px', overflowY: 'auto', backgroundColor: '#242A27',
             display: 'flex', flexDirection: 'column', gap: '12px'
           }}>
-            {messages.map((msg) => {
-              const isThisSpeaking = isSpeaking && currentSpeakingId === msg.id;
-              return (
+            {messages.map((msg) => (
+              <div 
+                key={msg.id}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start'
+                }}
+              >
                 <div 
-                  key={msg.id}
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start'
+                    maxWidth: '88%', padding: '12px 16px', borderRadius: '14px',
+                    background: msg.sender === 'user' ? '#7CA992' : '#191C1A',
+                    color: msg.sender === 'user' ? '#191C1A' : '#E4EAE6',
+                    fontSize: '13.5px', lineHeight: '1.5',
+                    border: msg.sender === 'user' ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
+                    wordBreak: 'break-word', position: 'relative'
                   }}
                 >
-                  <div 
-                    style={{
-                      maxWidth: '88%', padding: '12px 16px', borderRadius: '16px',
-                      background: msg.sender === 'user' 
-                        ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' 
-                        : '#ffffff',
-                      color: msg.sender === 'user' ? '#ffffff' : '#1e293b',
-                      fontSize: '13.5px', lineHeight: '1.5',
-                      boxShadow: msg.sender === 'user' 
-                        ? '0 4px 14px rgba(79, 70, 229, 0.3)' 
-                        : '0 2px 10px rgba(0,0,0,0.05)',
-                      border: msg.sender === 'user' ? 'none' : '1px solid rgba(226, 232, 240, 0.9)',
-                      borderTopRightRadius: msg.sender === 'user' ? '3px' : '16px',
-                      borderTopLeftRadius: msg.sender === 'bot' ? '3px' : '16px',
-                      wordBreak: 'break-word', position: 'relative'
-                    }}
-                  >
-                    {renderFormattedText(msg.text)}
+                  {renderFormattedText(msg.text)}
 
-                    {msg.action && (
-                      <button
-                        onClick={() => {
-                          stopSpeech();
-                          setIsOpen(false);
-                          navigate(msg.action.route);
-                        }}
-                        style={{
-                          marginTop: '10px', width: '100%', padding: '9px 12px',
-                          background: 'linear-gradient(135deg, #ede9fe 0%, #e0e7ff 100%)',
-                          color: '#4338ca', border: '1px solid #c7d2fe',
-                          borderRadius: '10px', fontSize: '12.5px', fontWeight: '700',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                          transition: 'all 0.2s', boxShadow: '0 2px 6px rgba(99, 102, 241, 0.15)'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'linear-gradient(135deg, #ddd6fe 0%, #c7d2fe 100%)';
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'linear-gradient(135deg, #ede9fe 0%, #e0e7ff 100%)';
-                          e.currentTarget.style.transform = 'translateY(0)';
-                        }}
-                      >
-                        <span>👉 {msg.action.label}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', padding: '0 4px' }}>
-                    <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '500' }}>
-                      {msg.time} {msg.provider && `• ✨ ${msg.provider}`}
-                    </span>
-
-                    {/* Individual Play / Stop Voice Button for Bot Messages */}
-                    {msg.sender === 'bot' && (
-                      <button
-                        onClick={() => speakText(msg.text, msg.id)}
-                        title={isThisSpeaking ? "Stop Voice" : "Read Aloud"}
-                        style={{
-                          background: isThisSpeaking ? '#fee2e2' : '#f1f5f9',
-                          border: isThisSpeaking ? '1px solid #fca5a5' : '1px solid #e2e8f0',
-                          borderRadius: '12px', padding: '1px 6px', fontSize: '11px',
-                          color: isThisSpeaking ? '#dc2626' : '#64748b', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600'
-                        }}
-                      >
-                        <span>{isThisSpeaking ? '⏹️ Stop' : '🔊 Listen'}</span>
-                      </button>
-                    )}
-                  </div>
+                  {msg.action && (
+                    <button
+                      onClick={() => {
+                        stopSpeech();
+                        setIsOpen(false);
+                        navigate(msg.action.route);
+                      }}
+                      style={{
+                        marginTop: '10px', width: '100%', padding: '8px 12px',
+                        background: 'rgba(124, 169, 146, 0.15)',
+                        color: '#7CA992', border: '1px solid rgba(124, 169, 146, 0.3)',
+                        borderRadius: '8px', fontSize: '12px', fontWeight: '700',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                      }}
+                    >
+                      <span>👉 {msg.action.label}</span>
+                    </button>
+                  )}
                 </div>
-              );
-            })}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', padding: '0 4px' }}>
+                  <span style={{ fontSize: '10px', color: '#9CAEA4', fontWeight: '500' }}>
+                    {msg.time}
+                  </span>
+                </div>
+              </div>
+            ))}
 
             {isTyping && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
-                backgroundColor: '#ffffff', borderRadius: '16px', width: 'fit-content',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0'
+                backgroundColor: '#191C1A', borderRadius: '14px', width: 'fit-content',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
               }}>
-                <span style={{ fontSize: '12px', color: '#4f46e5', fontWeight: '700' }}>AI Thinking</span>
-                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7c3aed', borderRadius: '50%', animation: 'dotPulse 1.2s infinite' }} />
-                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7c3aed', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.2s' }} />
-                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7c3aed', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.4s' }} />
+                <span style={{ fontSize: '12px', color: '#7CA992', fontWeight: '700' }}>Thinking</span>
+                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite' }} />
+                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.2s' }} />
+                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.4s' }} />
               </div>
             )}
 
@@ -692,21 +532,18 @@ export default function AIChatBot() {
 
           {/* Input Area */}
           <div style={{
-            padding: '12px 16px', backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0',
+            padding: '12px 16px', backgroundColor: '#191C1A', borderTop: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex', alignItems: 'center', gap: '10px'
           }}>
-            {/* Mic Voice Button */}
             <button
               onClick={toggleVoiceInput}
               title="Speak Question"
               style={{
-                backgroundColor: isListening ? '#ef4444' : '#f1f5f9',
-                color: isListening ? '#ffffff' : '#4f46e5',
-                border: 'none', borderRadius: '50%', width: '40px', height: '40px',
+                backgroundColor: isListening ? '#ef4444' : '#242A27',
+                color: isListening ? '#ffffff' : '#7CA992',
+                border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '50%', width: '38px', height: '38px',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '17px', flexShrink: 0, transition: 'all 0.25s',
-                boxShadow: isListening ? '0 0 16px rgba(239, 68, 68, 0.6)' : 'none',
-                animation: isListening ? 'micPulse 1.2s infinite' : 'none'
+                fontSize: '16px', flexShrink: 0
               }}
             >
               🎙️
@@ -714,7 +551,7 @@ export default function AIChatBot() {
 
             <input
               type="text"
-              placeholder={isListening ? "Listening... Speak now!" : "Ask ANY question in real-time..."}
+              placeholder={isListening ? "Listening... Speak now!" : "Ask ANY question..."}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => {
@@ -724,33 +561,22 @@ export default function AIChatBot() {
                 }
               }}
               style={{
-                flex: 1, padding: '11px 16px', borderRadius: '30px', border: '1.5px solid #e2e8f0',
-                fontSize: '13.5px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                transition: 'border-color 0.2s, box-shadow 0.2s'
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = '#7c3aed';
-                e.target.style.boxShadow = '0 0 0 3px rgba(124, 58, 237, 0.15)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '#e2e8f0';
-                e.target.style.boxShadow = 'none';
+                flex: 1, padding: '10px 14px', borderRadius: '20px', border: '1px solid rgba(255, 255, 255, 0.1)',
+                backgroundColor: '#242A27', color: '#E4EAE6',
+                fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box'
               }}
             />
 
-            {/* Send Button */}
             <button
               onClick={() => handleSend()}
               disabled={!inputText.trim() || isTyping}
               style={{
-                background: inputText.trim() && !isTyping 
-                  ? 'linear-gradient(135deg, #4f46e5, #7c3aed)' 
-                  : '#cbd5e1',
-                color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px',
+                background: inputText.trim() && !isTyping ? '#7CA992' : 'rgba(255, 255, 255, 0.1)',
+                color: inputText.trim() && !isTyping ? '#191C1A' : '#9CAEA4',
+                border: 'none', borderRadius: '50%', width: '38px', height: '38px',
                 cursor: inputText.trim() && !isTyping ? 'pointer' : 'not-allowed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '16px', flexShrink: 0, transition: 'all 0.25s',
-                boxShadow: inputText.trim() && !isTyping ? '0 4px 14px rgba(79, 70, 229, 0.4)' : 'none'
+                fontSize: '15px', flexShrink: 0
               }}
             >
               ➤
@@ -759,36 +585,11 @@ export default function AIChatBot() {
         </div>
       )}
 
-      {/* Embedded Modern Animations */}
+      {/* Embedded Animations */}
       <style>{`
-        @keyframes chatSlideUp {
-          from { opacity: 0; transform: translateY(24px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes floatOrb {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-2px); }
-        }
         @keyframes dotPulse {
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
           50% { opacity: 1; transform: scale(1.2); }
-        }
-        @keyframes micPulse {
-          0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-          70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        @keyframes pulseDot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(1.2); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes waveSpeech {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.15); }
         }
       `}</style>
     </>

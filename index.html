@@ -1,14 +1,37 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="SignVerse — Interactive 3D Sign Language Avatar Learning, Real-Time Translation, and AI Assistant Platform." />
-    <title>SignVerse — 3D Sign Language Hub & AI Translator</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'sage-bg': '#191C1A',
+            'sage-surface': '#242A27',
+            'sage-accent': '#7CA992',
+            'sage-text': '#E4EAE6',
+            'sage-muted': '#9CAEA4',
+          }
+        }
+      }
+    }
+  </script>
+  <meta name="description"
+    content="SignVerse — Interactive 3D Sign Language Avatar Learning, Real-Time Translation, and AI Assistant Platform." />
+  <title>SignVerse — 3D Sign Language Hub & AI Translator</title>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>

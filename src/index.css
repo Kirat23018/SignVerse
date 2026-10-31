@@ -1,29 +1,35 @@
-/* SignVerse Global Styling & Responsive Design System */
+/* SignVerse 'Soothing Sage & Muted Slate' Accessible Theme */
 * {
   box-sizing: border-box;
 }
 
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: light;
-  color: #1e293b;
-  background-color: #f8fafc;
+  color-scheme: dark;
+  color: #E4EAE6;
+  background-color: #191C1A;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --primary-blue: #004080;
-  --primary-hover: #003366;
-  --accent-green: #689f38;
-  --accent-green-hover: #558b2f;
-  --accent-cyan: #38bdf8;
-  --bg-page: #f8fafc;
-  --text-dark: #0f172a;
-  --text-muted: #64748b;
-  --border-light: #e2e8f0;
+  /* Soothing Sage & Muted Slate Design System */
+  --sage-bg: #191C1A;
+  --sage-surface: #242A27;
+  --sage-accent: #7CA992;
+  --sage-text: #E4EAE6;
+  --sage-muted: #9CAEA4;
+
+  /* Semantic Theme Variables */
+  --bg-page: #191C1A;
+  --bg-card: #242A27;
+  --text-primary: #E4EAE6;
+  --text-muted: #9CAEA4;
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-accent: rgba(124, 169, 146, 0.28);
 }
 
 body {
@@ -31,8 +37,8 @@ body {
   padding: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #f8fafc;
-  color: #1e293b;
+  background-color: #191C1A;
+  color: #E4EAE6;
 }
 
 #root {
@@ -40,6 +46,34 @@ body {
   min-height: 100vh;
   margin: 0;
   padding: 0;
+  background-color: #191C1A;
+}
+
+/* Core Utility Classes for Soothing Sage Theme */
+.bg-sage-bg { background-color: #191C1A !important; }
+.bg-sage-surface { background-color: #242A27 !important; }
+.bg-sage-accent { background-color: #7CA992 !important; }
+.text-sage-text { color: #E4EAE6 !important; }
+.text-sage-muted { color: #9CAEA4 !important; }
+.text-sage-accent { color: #7CA992 !important; }
+.border-sage-accent { border-color: #7CA992 !important; }
+.border-sage-surface { border-color: #242A27 !important; }
+
+/* Soft Glassmorphism */
+.sage-glass-card {
+  background-color: rgba(36, 42, 39, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  border-radius: 16px;
+}
+
+.sage-glass-panel {
+  background-color: rgba(36, 42, 39, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 select,
@@ -51,9 +85,9 @@ button {
 }
 
 select option {
-  color: #0f172a !important;
-  background-color: #ffffff !important;
-  padding: 6px;
+  color: #E4EAE6 !important;
+  background-color: #242A27 !important;
+  padding: 8px;
 }
 
 /* ================= 1. DUAL-PANEL 3D AVATAR LAYOUT ================= */
@@ -74,10 +108,11 @@ select option {
   width: 45%;
   height: 100%;
   padding: 26px 30px;
-  background-color: #ffffff;
+  background-color: #242A27;
+  color: #E4EAE6;
   overflow-y: auto;
   overflow-x: hidden;
-  border-right: 2px solid var(--border-light);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   order: 1;
@@ -88,7 +123,7 @@ select option {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #e5e7eb;
+  background-color: #191C1A;
   position: relative;
   overflow: hidden;
   order: 2;
@@ -122,7 +157,6 @@ select option {
     overflow-y: auto !important;
   }
 
-  /* 3D Avatar on TOP for small screens: fully visible, centered, clear height */
   .signverse-panel-right {
     width: 100% !important;
     height: 48vh !important;
@@ -130,12 +164,12 @@ select option {
     max-height: 380px !important;
     flex: none !important;
     order: 1 !important;
-    background-color: #e5e7eb !important;
+    background-color: #191C1A !important;
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
     position: relative !important;
-    border-bottom: 2px solid var(--border-light) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     overflow: hidden !important;
   }
 
@@ -155,7 +189,6 @@ select option {
     display: block !important;
   }
 
-  /* Controls/Inputs on BOTTOM */
   .signverse-panel-left {
     width: 100% !important;
     height: auto !important;
@@ -164,18 +197,20 @@ select option {
     padding: 16px 18px !important;
     border-right: none !important;
     overflow-y: visible !important;
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15) !important;
   }
 }
 
 /* ================= 2. RESPONSIVE NAVBAR ================= */
 .signverse-navbar-wrapper {
-  background-color: #004080;
-  padding: 10px 20px;
+  background-color: rgba(36, 42, 39, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 10px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -191,7 +226,7 @@ select option {
 }
 
 .signverse-nav-logo {
-  color: #ffffff;
+  color: #E4EAE6;
   text-decoration: none;
   font-size: 21px;
   font-weight: 800;
@@ -202,8 +237,8 @@ select option {
 }
 
 .signverse-nav-badge {
-  background-color: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+  background-color: rgba(124, 169, 146, 0.14);
+  color: #7CA992;
   padding: 3px 9px;
   border-radius: 14px;
   font-size: 11.5px;
@@ -211,19 +246,19 @@ select option {
   display: flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(124, 169, 146, 0.28);
   white-space: nowrap;
   text-decoration: none;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
 .signverse-nav-badge:hover {
-  background-color: rgba(255, 255, 255, 0.25);
+  background-color: rgba(124, 169, 146, 0.24);
 }
 
 .signverse-nav-links-desktop {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -233,12 +268,11 @@ select option {
   align-items: center;
 }
 
-/* Hamburger button: hidden on desktop (> 920px) */
 .signverse-nav-mobile-toggle {
   display: none;
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: #E4EAE6;
   font-size: 26px;
   cursor: pointer;
   padding: 4px 8px;
@@ -247,10 +281,9 @@ select option {
 }
 
 .signverse-nav-mobile-toggle:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Mobile Drawer */
 .signverse-nav-drawer {
   display: none;
 }
@@ -272,39 +305,41 @@ select option {
     top: 56px;
     left: 0;
     width: 100%;
-    background-color: #003366;
+    background-color: #242A27;
     padding: 16px 20px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
     z-index: 999;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     max-height: calc(100vh - 56px);
     overflow-y: auto;
-    gap: 10px;
+    gap: 8px;
   }
 
   .signverse-nav-drawer-link {
-    color: #ffffff;
+    color: #9CAEA4;
     text-decoration: none;
     font-size: 15px;
     font-weight: 600;
     padding: 8px 12px;
-    border-radius: 6px;
+    border-radius: 8px;
     display: block;
-    transition: background 0.15s;
+    transition: all 0.15s;
   }
 
   .signverse-nav-drawer-link:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #E4EAE6;
   }
 
   .signverse-nav-drawer-link.active {
-    background-color: rgba(56, 189, 248, 0.2);
-    color: #38bdf8;
+    background-color: rgba(124, 169, 146, 0.16);
+    color: #7CA992;
   }
 
   .signverse-nav-drawer-divider {
     height: 1px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
     margin: 6px 0;
   }
 }
@@ -325,7 +360,6 @@ select option {
   }
 }
 
-/* Responsive Card Grids (Dashboard, Home, Pricing) */
 .signverse-responsive-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -345,7 +379,6 @@ select option {
   }
 }
 
-/* Hero Split (Home Page) */
 .signverse-hero-grid {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -361,8 +394,6 @@ select option {
   }
 }
 
-
-/* AI Chatbot Floating Window Responsive */
 /* AI Chatbot Floating Trigger Button */
 .signverse-chat-trigger-container {
   position: fixed;
@@ -375,18 +406,25 @@ select option {
 
 .signverse-chat-trigger-btn {
   position: relative;
-  color: white;
-  border: 2px solid rgba(255, 255, 255, 0.35);
+  background-color: #242A27;
+  color: #E4EAE6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 50px;
-  padding: 10px 22px 10px 14px;
-  font-size: 15px;
+  padding: 10px 20px 10px 14px;
+  font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  backdrop-filter: blur(10px);
+  transition: all 0.25s ease;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.signverse-chat-trigger-btn:hover {
+  background-color: #2b332f;
+  border-color: rgba(124, 169, 146, 0.4);
 }
 
 .signverse-chat-trigger-text {
@@ -395,7 +433,6 @@ select option {
   align-items: flex-start;
 }
 
-/* On mobile / small screens: show only small circular floating icon */
 @media (max-width: 768px) {
   .signverse-chat-trigger-container {
     bottom: 16px !important;
@@ -410,7 +447,6 @@ select option {
     padding: 0 !important;
     justify-content: center !important;
     align-items: center !important;
-    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.55) !important;
   }
 
   .signverse-chat-trigger-text {
@@ -418,7 +454,7 @@ select option {
   }
 }
 
-/* AI Chatbot Floating Window Responsive */
+/* AI Chatbot Floating Window */
 .signverse-chat-window {
   position: fixed;
   bottom: 92px;
@@ -428,15 +464,15 @@ select option {
   max-width: calc(100vw - 32px);
   height: 600px;
   max-height: calc(100vh - 120px);
-  background-color: #ffffff;
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25), 0 0 1px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background-color: #242A27;
+  color: #E4EAE6;
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   font-family: system-ui, -apple-system, sans-serif;
-  animation: chatSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (max-width: 480px) {
@@ -449,5 +485,3 @@ select option {
     border-radius: 16px !important;
   }
 }
-
-

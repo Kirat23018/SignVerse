@@ -102,7 +102,7 @@ export default function Alphabets() {
           } else {
             iframe.contentWindow.postMessage({ type: 'PLAY_TEXT', text }, '*');
           }
-        } catch (e) {
+        } catch {
           iframe.contentWindow.postMessage({ type: 'PLAY_TEXT', text }, '*');
         }
       } else {
@@ -113,7 +113,7 @@ export default function Alphabets() {
           } else {
             iframe.contentWindow.postMessage({ type: 'PLAY_SIGML', file: path }, '*');
           }
-        } catch (e) {
+        } catch {
           iframe.contentWindow.postMessage({ type: 'PLAY_SIGML', file: path }, '*');
         }
       }

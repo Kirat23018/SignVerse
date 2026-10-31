@@ -394,13 +394,13 @@ export default function Practice() {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
                   <div style={{ 
-                    backgroundColor: '#e0f2fe', width: '100%', padding: '18px', borderRadius: '10px', 
-                    border: '2px solid #38bdf8', marginBottom: '20px', boxShadow: '0 2px 8px rgba(56,189,248,0.15)' 
+                    backgroundColor: '#ecfdf5', width: '100%', padding: '18px', borderRadius: '10px', 
+                    border: '2px solid #10b981', marginBottom: '20px', boxShadow: '0 2px 8px rgba(16,185,129,0.15)' 
                   }}>
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#0369a1', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>
-                      SIGN MEANING / GLOSS
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#059669', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>
+                       SIGN MEANING / GLOSS
                     </span>
-                    <h1 style={{ color: '#003366', margin: 0, fontSize: '32px', letterSpacing: '0.5px', fontWeight: '900', textTransform: 'capitalize' }}>
+                    <h1 style={{ color: '#064e3b', margin: 0, fontSize: '32px', letterSpacing: '0.5px', fontWeight: '900', textTransform: 'capitalize' }}>
                       {currentWord?.label}
                     </h1>
                     <span style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'block' }}>

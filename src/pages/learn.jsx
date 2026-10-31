@@ -15,7 +15,7 @@ export default function Learn() {
 
   const [activeModule, setActiveModule] = useState(displayCategories[0] || '');
   const [activeItem, setActiveItem] = useState(safeData[displayCategories[0]] ? safeData[displayCategories[0]][0] : null);
-  const [viewMode, setViewMode] = useState('3d');
+  const viewMode = '3d';
   const iframeRef = useRef(null);
 
   const handleItemClick = (item) => {

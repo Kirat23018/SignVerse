@@ -111,7 +111,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
             display: 'flex',
             alignItems: 'center',
             gap: '12px',
-            border: '1px solid #38bdf8',
+            border: '1px solid #10b981',
             animation: 'slideIn 0.3s ease-out'
           }}
         >
@@ -137,8 +137,8 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: '#e0f2fe',
-            color: '#0284c7',
+            backgroundColor: '#ecfdf5',
+            color: '#059669',
             padding: '4px 12px',
             borderRadius: '20px',
             fontSize: '12px',
@@ -278,7 +278,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
             <path
               d="M 120 40 Q 220 160 180 270 T 130 520"
               fill="none"
-              stroke="#3b82f6"
+              stroke="#10b981"
               strokeWidth="4"
               strokeDasharray="8 8"
               strokeLinecap="round"
@@ -317,7 +317,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
                   width: '92px',
                   height: '92px',
                   borderRadius: '50%',
-                  backgroundColor: isLevelLocked ? '#94a3b8' : level.color || '#3b82f6',
+                  backgroundColor: isLevelLocked ? '#94a3b8' : level.color || '#10b981',
                   color: '#ffffff',
                   display: 'flex',
                   flexDirection: 'column',
@@ -435,7 +435,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
                     📖 {level.lessons.length} Interactive Lessons
                   </span>
 
-                  <span style={{ color: isLevelLocked ? '#d97706' : '#2563eb' }}>
+                  <span style={{ color: isLevelLocked ? '#d97706' : '#10b981' }}>
                     {isLevelLocked ? 'Unlock Level →' : 'Start Lesson →'}
                   </span>
                 </div>
@@ -479,7 +479,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
             {/* Modal Top Header with Gradient */}
             <div
               style={{
-                background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #6366f1 100%)',
+                background: 'linear-gradient(135deg, #064e3b 0%, #059669 50%, #10b981 100%)',
                 padding: '28px 24px',
                 color: '#ffffff',
                 textAlign: 'center',
@@ -531,7 +531,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#4338ca', textTransform: 'uppercase' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#065f46', textTransform: 'uppercase' }}>
                     Hackathon All-Access Pass
                   </div>
                   <div style={{ fontSize: '13px', color: '#64748b' }}>
@@ -575,7 +575,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
                 disabled={isProcessingPayment}
                 style={{
                   width: '100%',
-                  backgroundColor: '#2563eb',
+                  backgroundColor: '#10b981',
                   color: '#ffffff',
                   border: 'none',
                   padding: '14px',
@@ -583,7 +583,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
                   fontSize: '16px',
                   fontWeight: '800',
                   cursor: isProcessingPayment ? 'wait' : 'pointer',
-                  boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.4)',
+                  boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.4)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
