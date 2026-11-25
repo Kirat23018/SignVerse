@@ -33,16 +33,19 @@ export function getSubscriptionStatus() {
   }
 
   const startTime = parseInt(trialStart, 10);
+  const safeStartTime = Number.isFinite(startTime) && startTime > 0 ? startTime : Date.now();
   const now = Date.now();
-  const elapsedDays = (now - startTime) / (1000 * 60 * 60 * 24);
+  const elapsedDays = (now - safeStartTime) / (1000 * 60 * 60 * 24);
   const trialDaysRemaining = Math.max(0, Math.ceil(TRIAL_DURATION_DAYS - elapsedDays));
-  const isTrialActive = plan.includes('Trial') && trialDaysRemaining > 0;
-  const isPaidPlan = plan.includes('$5') || plan.includes('$60') || plan.includes('Pro');
+  const safePlan = plan || 'Free Trial (3 Days)';
+  const isTrialActive = safePlan.includes('Trial') && trialDaysRemaining > 0;
+  const isPaidPlan = safePlan.includes('$5') || safePlan.includes('$60') || safePlan.includes('Pro') || safePlan.includes('₹');
   const isExpired = !isPaidPlan && trialDaysRemaining === 0;
+  const parsedCredits = parseInt(credits || '0', 10);
 
   return {
-    plan: isExpired ? 'Trial Expired' : plan,
-    credits: parseInt(credits || '0', 10),
+    plan: isExpired ? 'Trial Expired' : safePlan,
+    credits: Number.isFinite(parsedCredits) && parsedCredits >= 0 ? parsedCredits : 0,
     trialDaysRemaining,
     isTrialActive,
     isPaidPlan,
@@ -105,17 +108,22 @@ export function addCredits(amount = 50) {
  * Upgrade to Paid Plan ($5/mo or $60/yr)
  */
 export function upgradeSubscription(planType) {
-  // planType: 'monthly' | 'yearly'
+  // planType: 'monthly' | 'yearly' | 'annual'
   if (planType === 'monthly') {
-    localStorage.setItem(STORAGE_KEYS.PLAN, 'Pro Monthly ($5/mo)');
+    localStorage.setItem(STORAGE_KEYS.PLAN, 'Pro Monthly (₹199/mo)');
     localStorage.setItem(STORAGE_KEYS.CREDITS, '500');
-  } else if (planType === 'yearly') {
-    localStorage.setItem(STORAGE_KEYS.PLAN, 'Pro Annual ($60/yr)');
+  } else if (planType === 'yearly' || planType === 'annual') {
+    localStorage.setItem(STORAGE_KEYS.PLAN, 'Pro Annual (₹1,499/yr)');
     localStorage.setItem(STORAGE_KEYS.CREDITS, '9999');
+  } else {
+    return getSubscriptionStatus();
   }
 
   const expiryDate = Date.now() + (planType === 'monthly' ? 30 : 365) * 24 * 60 * 60 * 1000;
   localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION_EXPIRY, expiryDate.toString());
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('signverse_subscription_updated'));
+  }
 
   return getSubscriptionStatus();
 }

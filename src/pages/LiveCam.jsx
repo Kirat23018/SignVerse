@@ -932,7 +932,7 @@ export default function LiveCam() {
         ctx?.clearRect(0, 0, canvasEl.width, canvasEl.height);
       }
     };
-  }, [userSettings.cameraId, userSettings.trackingConfidence]);
+  }, [userSettings.cameraId, userSettings.trackingConfidence, speakSentence]);
 
   const clearHistory = () => {
     setHistory([]);

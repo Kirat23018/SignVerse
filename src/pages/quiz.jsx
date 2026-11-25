@@ -69,12 +69,13 @@ export default function Quiz() {
     }
   }, []);
 
-  // Listen to CWASA gloss updates from iframe
+  // Listen to CWASA gloss updates from iframe (same-origin verified)
   useEffect(() => {
     const handleMessage = (e) => {
+      if (e.origin && e.origin !== window.location.origin) return;
       if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
         if (e.data.gloss) setLiveGloss(e.data.gloss);
-        if (e.data.frame) setLiveFrame(e.data.frame);
+        if (e.data.signFrame || e.data.frame) setLiveFrame(e.data.signFrame || e.data.frame);
       }
     };
     window.addEventListener('message', handleMessage);
@@ -353,12 +354,14 @@ export default function Quiz() {
               <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '8px' }}>
                 CHOOSE VOCABULARY CATEGORY:
               </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              <div role="group" aria-label="Choose vocabulary category" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {Object.keys(categoryMap).slice(0, 8).map(cat => {
                   const isSel = selectedCategory === cat;
                   return (
                     <button
+                      type="button"
                       key={cat}
+                      aria-pressed={isSel}
                       onClick={() => setSelectedCategory(cat)}
                       style={{
                         padding: '6px 12px',
@@ -520,8 +523,8 @@ export default function Quiz() {
                     indicator = '✗';
                   } else {
                     bgColor = '#f1f5f9';
-                    textColor = '#94a3b8';
-                    borderColor = '#e2e8f0';
+                    textColor = '#475569';
+                    borderColor = '#cbd5e1';
                   }
                 }
 
@@ -582,7 +585,10 @@ export default function Quiz() {
 
             {/* Instant Feedback Pill */}
             {feedback && (
-              <div style={{
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
                 padding: '12px 16px',
                 borderRadius: '8px',
                 textAlign: 'center',

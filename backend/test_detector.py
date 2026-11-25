@@ -109,5 +109,26 @@ class TestGestureDetector(unittest.TestCase):
         self.assertEqual(res["gesture"], "Fist")
         self.assertEqual(res["text"], "Rock")
 
+    def test_empty_and_insufficient_landmarks(self):
+        res_empty = self.detector.detect([])
+        self.assertEqual(res_empty["gesture"], "None")
+        self.assertFalse(res_empty["landmarks_detected"])
+
+        res_short = self.detector.detect([LandmarkPoint(0.5, 0.5)] * 10)
+        self.assertEqual(res_short["gesture"], "None")
+        self.assertEqual(res_short["confidence"], 0.0)
+
+    def test_unknown_gesture_fallback(self):
+        landmarks = self._create_base_hand()
+        # Extend only pinky (unrecognized static class)
+        self._fold_finger(landmarks, 5, 6, 7, 8)
+        self._fold_finger(landmarks, 9, 10, 11, 12)
+        self._fold_finger(landmarks, 13, 14, 15, 16)
+        landmarks[4] = LandmarkPoint(0.48, 0.55)
+        res = self.detector.detect(landmarks)
+        self.assertEqual(res["gesture"], "Unknown")
+        self.assertEqual(res["text"], "")
+        self.assertTrue(res["landmarks_detected"])
+
 if __name__ == "__main__":
     unittest.main()

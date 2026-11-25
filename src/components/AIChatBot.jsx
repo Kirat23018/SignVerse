@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { askGeminiRealtime, QUICK_SUGGESTIONS } from '../utils/aiBotEngine';
+import { askGeminiRealtime, isSafeInternalRoute, QUICK_SUGGESTIONS } from '../utils/aiBotEngine';
 
 export default function AIChatBot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -10,7 +10,7 @@ export default function AIChatBot() {
       sender: 'bot',
       text: "👋 Hi! I'm **SignBot AI**, your calming, 24/7 assistant.\n\nAsk me **ANY question** — from 3D sign translations, deaf culture, and platform shortcuts to science, coding, and general knowledge! 🌿",
       action: null,
-      provider: 'Groq AI ⚡',
+      provider: 'SignBot AI',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -21,15 +21,23 @@ export default function AIChatBot() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentSpeakingId, setCurrentSpeakingId] = useState(null);
   const [hasUnread, setHasUnread] = useState(false);
-  
-  // API Key Settings Modal
-  const activeKey = localStorage.getItem('groq_api_key') || localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GROQ_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '';
+  const [statusNotice, setStatusNotice] = useState('');
+
+  // Optional session-only BYOK key (never persisted to localStorage or bundled from VITE_ env)
+  const getInitialSessionKey = () => {
+    try {
+      return window.sessionStorage?.getItem('signverse_session_ai_key') || '';
+    } catch {
+      return '';
+    }
+  };
   const [showSettings, setShowSettings] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(activeKey);
-  const [isKeySaved, setIsKeySaved] = useState(!!activeKey);
+  const [apiKeyInput, setApiKeyInput] = useState(getInitialSessionKey);
+  const [isKeySaved, setIsKeySaved] = useState(() => Boolean(getInitialSessionKey()));
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
+  const inputRef = useRef(null);
   const navigate = useNavigate();
 
   const scrollToBottom = () => {
@@ -42,6 +50,22 @@ export default function AIChatBot() {
       setHasUnread(false);
     }
   }, [messages, isOpen, isTyping]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (showSettings) {
+          setShowSettings(false);
+        } else {
+          stopSpeech();
+          setIsOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, showSettings]);
 
   useEffect(() => {
     return () => {
@@ -81,24 +105,21 @@ export default function AIChatBot() {
     utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const naturalVoice = voices.find(v => v.lang.includes('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha')));
+    const naturalVoice = voices.find((v) => v.lang.includes('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha')));
     if (naturalVoice) utterance.voice = naturalVoice;
 
     utterance.onstart = () => {
       setIsSpeaking(true);
-      setIsSpeechPaused(false);
       setCurrentSpeakingId(messageId);
     };
 
     utterance.onend = () => {
       setIsSpeaking(false);
-      setIsSpeechPaused(false);
       setCurrentSpeakingId(null);
     };
 
     utterance.onerror = () => {
       setIsSpeaking(false);
-      setIsSpeechPaused(false);
       setCurrentSpeakingId(null);
     };
 
@@ -108,9 +129,11 @@ export default function AIChatBot() {
   const toggleVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Voice input is not supported in this browser. Please use Chrome or Edge.");
+      setStatusNotice('Voice input is not supported in this browser. Please use Chrome or Edge.');
       return;
     }
+
+    setStatusNotice('');
 
     if (isListening) {
       recognitionRef.current?.stop();
@@ -134,9 +157,9 @@ export default function AIChatBot() {
         handleSend(transcript);
       };
 
-      recognition.onerror = (event) => {
-        console.error("Speech Recognition Error:", event.error);
+      recognition.onerror = () => {
         setIsListening(false);
+        setStatusNotice('Could not capture voice input. Please check microphone permissions.');
       };
 
       recognition.onend = () => {
@@ -145,15 +168,17 @@ export default function AIChatBot() {
 
       recognitionRef.current = recognition;
       recognition.start();
-    } catch (e) {
-      console.error(e);
+    } catch {
       setIsListening(false);
+      setStatusNotice('Unable to start speech recognition.');
     }
   };
 
   const handleSend = async (customPrompt = null) => {
     const query = (customPrompt || inputText).trim();
     if (!query || isTyping) return;
+
+    setStatusNotice('');
 
     const userMsg = {
       id: Date.now(),
@@ -168,18 +193,18 @@ export default function AIChatBot() {
 
     try {
       const history = messages.slice(-6).map((m) => ({
-        role: m.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: m.text }]
+        sender: m.sender,
+        text: m.text
       }));
 
-      const response = await askGeminiRealtime(query, history);
+      const response = await askGeminiRealtime(query, history, apiKeyInput.trim() || null);
 
       const botMsg = {
         id: Date.now() + 1,
         sender: 'bot',
         text: response.text,
-        action: response.action,
-        provider: response.provider || 'Groq AI ⚡',
+        action: response.action && isSafeInternalRoute(response.action.route) ? response.action : null,
+        provider: response.provider || 'SignBot AI',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -210,37 +235,41 @@ export default function AIChatBot() {
 
   const handleSaveApiKey = () => {
     const trimmed = apiKeyInput.trim();
-    if (trimmed.startsWith('gsk_')) {
-      localStorage.setItem('groq_api_key', trimmed);
-    } else {
-      localStorage.setItem('gemini_api_key', trimmed);
+    try {
+      if (trimmed) {
+        window.sessionStorage?.setItem('signverse_session_ai_key', trimmed);
+      } else {
+        window.sessionStorage?.removeItem('signverse_session_ai_key');
+      }
+    } catch {
+      // Ignore storage errors
     }
-    setIsKeySaved(!!trimmed);
+    setIsKeySaved(Boolean(trimmed));
     setShowSettings(false);
+    setStatusNotice(trimmed ? 'Session AI key updated (cleared automatically when tab closes).' : 'Session AI key cleared.');
   };
 
-  // Modern Formatted Markdown Renderer
   const renderFormattedText = (text) => {
-    const lines = text.split('\n');
+    const lines = String(text || '').split('\n');
     return lines.map((line, lineIdx) => {
       const parts = line.split(/(\*\*.*?\*\*)/g);
       const formattedLine = parts.map((part, partIdx) => {
         if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={partIdx} style={{ color: '#7CA992', fontWeight: '700' }}>{part.slice(2, -2)}</strong>;
+          return <strong key={partIdx} style={{ color: '#A3C7B5', fontWeight: '700' }}>{part.slice(2, -2)}</strong>;
         }
         if (part.startsWith('`') && part.endsWith('`')) {
-          return <code key={partIdx} style={{ backgroundColor: 'rgba(124, 169, 146, 0.15)', color: '#7CA992', padding: '2px 5px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>{part.slice(1, -1)}</code>;
+          return <code key={partIdx} style={{ backgroundColor: 'rgba(124, 169, 146, 0.15)', color: '#A3C7B5', padding: '2px 5px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>{part.slice(1, -1)}</code>;
         }
         return part;
       });
 
       if (line.startsWith('### ')) {
-        return <h4 key={lineIdx} style={{ margin: '10px 0 4px 0', color: '#7CA992', fontSize: '14.5px', fontWeight: '700' }}>{line.replace('### ', '')}</h4>;
+        return <h4 key={lineIdx} style={{ margin: '10px 0 4px 0', color: '#A3C7B5', fontSize: '14.5px', fontWeight: '700' }}>{line.replace('### ', '')}</h4>;
       }
       if (line.startsWith('- ') || line.startsWith('• ')) {
         return (
           <div key={lineIdx} style={{ display: 'flex', gap: '8px', margin: '3px 0 3px 6px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#7CA992', fontWeight: 'bold' }}>•</span>
+            <span aria-hidden="true" style={{ color: '#A3C7B5', fontWeight: 'bold' }}>•</span>
             <div style={{ flex: 1 }}>{formattedLine}</div>
           </div>
         );
@@ -252,19 +281,22 @@ export default function AIChatBot() {
   return (
     <>
       {/* 1. Floating Trigger Button (Bottom-Right) */}
-      <div 
+      <div
         className="signverse-chat-trigger-container"
-        style={{ 
+        style={{
           position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
           display: 'flex', alignItems: 'center'
         }}
       >
         <button
+          type="button"
           onClick={() => {
             if (isOpen) stopSpeech();
             setIsOpen(!isOpen);
           }}
-          aria-label="Open AI Assistant"
+          aria-expanded={isOpen}
+          aria-controls="signbot-dialog"
+          aria-label={isOpen ? 'Close SignBot AI assistant' : 'Open SignBot AI assistant'}
           className="signverse-chat-trigger-btn"
           style={{
             position: 'relative',
@@ -284,18 +316,17 @@ export default function AIChatBot() {
             backdropFilter: 'blur(10px)'
           }}
         >
-          {/* Avatar Icon */}
-          <div style={{
-            width: '36px', height: '36px', borderRadius: '50%',
-            background: isOpen ? 'rgba(255, 255, 255, 0.08)' : '#191C1A',
-            color: isOpen ? '#E4EAE6' : '#7CA992',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            position: 'relative', flexShrink: 0
-          }}>
-            <span style={{ fontSize: '18px' }}>
-              {isOpen ? '✕' : '🌿'}
-            </span>
-            
+          <div
+            aria-hidden="true"
+            style={{
+              width: '36px', height: '36px', borderRadius: '50%',
+              background: isOpen ? 'rgba(255, 255, 255, 0.08)' : '#191C1A',
+              color: isOpen ? '#E4EAE6' : '#7CA992',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              position: 'relative', flexShrink: 0
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>{isOpen ? '✕' : '🌿'}</span>
             <span style={{
               position: 'absolute', bottom: '-1px', right: '-1px', width: '10px', height: '10px',
               backgroundColor: '#7CA992', borderRadius: '50%', border: '2px solid #242A27'
@@ -307,24 +338,31 @@ export default function AIChatBot() {
               {isOpen ? 'Close Assistant' : 'Ask SignAI 🌿'}
             </span>
             {!isOpen && (
-              <span style={{ fontSize: '10.5px', opacity: 0.85, fontWeight: '500' }}>
+              <span style={{ fontSize: '10.5px', opacity: 0.9, fontWeight: '600' }}>
                 Soothing Assistant
               </span>
             )}
           </div>
 
           {hasUnread && !isOpen && (
-            <span style={{
-              position: 'absolute', top: '-4px', right: '-4px', width: '12px', height: '12px',
-              backgroundColor: '#7CA992', borderRadius: '50%', border: '2px solid #191C1A'
-            }} />
+            <span
+              aria-label="Unread message"
+              style={{
+                position: 'absolute', top: '-4px', right: '-4px', width: '12px', height: '12px',
+                backgroundColor: '#7CA992', borderRadius: '50%', border: '2px solid #191C1A'
+              }}
+            />
           )}
         </button>
       </div>
 
       {/* 2. Floating AI Chatbot Window */}
       {isOpen && (
-        <div 
+        <div
+          id="signbot-dialog"
+          role="dialog"
+          aria-modal="false"
+          aria-label="SignBot AI Assistant"
           className="signverse-chat-window"
           style={{
             position: 'fixed',
@@ -352,38 +390,45 @@ export default function AIChatBot() {
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '38px', height: '38px',
-                borderRadius: '50%',
-                background: 'rgba(124, 169, 146, 0.15)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: '1px solid rgba(124, 169, 146, 0.3)',
-                fontSize: '18px', flexShrink: 0
-              }}>
+              <div
+                aria-hidden="true"
+                style={{
+                  width: '38px', height: '38px',
+                  borderRadius: '50%',
+                  background: 'rgba(124, 169, 146, 0.15)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '1px solid rgba(124, 169, 146, 0.3)',
+                  fontSize: '18px', flexShrink: 0
+                }}
+              >
                 🤖
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#E4EAE6' }}>SignBot AI</h3>
+                  <h2 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#E4EAE6' }}>SignBot AI</h2>
                   <span style={{ fontSize: '10px', backgroundColor: '#7CA992', color: '#191C1A', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>v2.5</span>
                 </div>
-                <span style={{ fontSize: '11px', color: '#9CAEA4', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
-                  <span style={{ width: '7px', height: '7px', backgroundColor: '#7CA992', borderRadius: '50%' }} />
-                  {isKeySaved ? 'Groq / Gemini Active' : 'Online Mode'}
+                <span style={{ fontSize: '11px', color: '#B5C5BC', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+                  <span aria-hidden="true" style={{ width: '7px', height: '7px', backgroundColor: '#7CA992', borderRadius: '50%' }} />
+                  {isKeySaved ? 'Session Key Active' : 'Secure Proxy Mode'}
                 </span>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <button
+                type="button"
                 onClick={() => setShowSettings(!showSettings)}
-                title="AI Settings & API Key"
-                style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '8px', color: '#E4EAE6', fontSize: '14px', cursor: 'pointer', padding: '6px 8px' }}
+                aria-label="Configure optional session AI API key"
+                aria-expanded={showSettings}
+                title="AI Settings & Optional Session Key"
+                style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '8px', color: '#E4EAE6', fontSize: '14px', cursor: 'pointer', padding: '6px 8px' }}
               >
-                ⚙️
+                <span aria-hidden="true">⚙️</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   if (ttsEnabled) {
                     stopSpeech();
@@ -392,45 +437,60 @@ export default function AIChatBot() {
                     setTtsEnabled(true);
                   }
                 }}
+                aria-label={ttsEnabled ? 'Mute voice responses' : 'Enable voice responses'}
+                aria-pressed={ttsEnabled}
                 title={ttsEnabled ? 'Mute Auto Voice' : 'Enable Auto Voice Audio'}
                 style={{
-                  background: ttsEnabled ? '#7CA992' : 'rgba(255,255,255,0.06)',
+                  background: ttsEnabled ? '#7CA992' : 'rgba(255,255,255,0.08)',
                   border: 'none', borderRadius: '8px',
                   color: ttsEnabled ? '#191C1A' : '#E4EAE6',
                   fontSize: '14px', cursor: 'pointer', padding: '6px 8px'
                 }}
               >
-                {ttsEnabled ? '🔊' : '🔇'}
+                <span aria-hidden="true">{ttsEnabled ? '🔊' : '🔇'}</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   stopSpeech();
                   setIsOpen(false);
                 }}
-                style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '8px', color: '#9CAEA4', fontSize: '14px', cursor: 'pointer', padding: '6px 8px' }}
+                aria-label="Close SignBot AI assistant"
+                style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '8px', color: '#E4EAE6', fontSize: '14px', cursor: 'pointer', padding: '6px 8px' }}
               >
-                ✕
+                <span aria-hidden="true">✕</span>
               </button>
             </div>
           </div>
 
-          {/* Settings Modal (API Key configuration) */}
+          {/* Settings Modal (Optional Session-Only Key) */}
           {showSettings && (
             <div style={{ backgroundColor: '#191C1A', padding: '14px 18px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#E4EAE6' }}>⚙️ Connected AI Provider</span>
-                <button onClick={() => setShowSettings(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#9CAEA4' }}>Close</button>
+                <label htmlFor="signbot-session-key" style={{ fontSize: '12px', fontWeight: 'bold', color: '#E4EAE6' }}>
+                  Optional Session AI Key
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#B5C5BC' }}
+                >
+                  Close
+                </button>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
+                  id="signbot-session-key"
                   type="password"
-                  placeholder="Paste Groq or Gemini Key..."
+                  autoComplete="off"
+                  placeholder="Optional Groq or Gemini key (session only)..."
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  style={{ flex: 1, padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)', background: '#242A27', color: '#E4EAE6', fontSize: '12px', outline: 'none' }}
+                  style={{ flex: 1, padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.16)', background: '#242A27', color: '#E4EAE6', fontSize: '12px' }}
                 />
                 <button
+                  type="button"
                   onClick={handleSaveApiKey}
                   style={{ background: '#7CA992', color: '#191C1A', border: 'none', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
@@ -441,16 +501,20 @@ export default function AIChatBot() {
           )}
 
           {/* Quick Suggestion Pills */}
-          <div style={{
-            backgroundColor: '#191C1A', padding: '8px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            display: 'flex', gap: '6px', overflowX: 'auto', whiteSpace: 'nowrap', scrollbarWidth: 'none'
-          }}>
+          <div
+            aria-label="Quick question suggestions"
+            style={{
+              backgroundColor: '#191C1A', padding: '8px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex', gap: '6px', overflowX: 'auto', whiteSpace: 'nowrap', scrollbarWidth: 'none'
+            }}
+          >
             {QUICK_SUGGESTIONS.map((suggestion, idx) => (
               <button
+                type="button"
                 key={idx}
                 onClick={() => handleSend(suggestion)}
                 style={{
-                  backgroundColor: '#242A27', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px',
+                  backgroundColor: '#242A27', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '20px',
                   padding: '5px 12px', fontSize: '11.5px', color: '#E4EAE6', cursor: 'pointer',
                   fontWeight: '600', flexShrink: 0
                 }}
@@ -460,13 +524,35 @@ export default function AIChatBot() {
             ))}
           </div>
 
+          {statusNotice && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                padding: '8px 14px',
+                backgroundColor: 'rgba(124, 169, 146, 0.14)',
+                color: '#E4EAE6',
+                fontSize: '12px',
+                borderBottom: '1px solid rgba(124, 169, 146, 0.25)'
+              }}
+            >
+              {statusNotice}
+            </div>
+          )}
+
           {/* Messages Container */}
-          <div style={{
-            flex: 1, padding: '16px', overflowY: 'auto', backgroundColor: '#242A27',
-            display: 'flex', flexDirection: 'column', gap: '12px'
-          }}>
+          <div
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            aria-label="Chat conversation"
+            style={{
+              flex: 1, padding: '16px', overflowY: 'auto', backgroundColor: '#242A27',
+              display: 'flex', flexDirection: 'column', gap: '12px'
+            }}
+          >
             {messages.map((msg) => (
-              <div 
+              <div
                 key={msg.id}
                 style={{
                   display: 'flex',
@@ -474,7 +560,7 @@ export default function AIChatBot() {
                   alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start'
                 }}
               >
-                <div 
+                <div
                   style={{
                     maxWidth: '88%', padding: '12px 16px', borderRadius: '14px',
                     background: msg.sender === 'user' ? '#7CA992' : '#191C1A',
@@ -488,7 +574,9 @@ export default function AIChatBot() {
 
                   {msg.action && (
                     <button
+                      type="button"
                       onClick={() => {
+                        if (!isSafeInternalRoute(msg.action.route)) return;
                         stopSpeech();
                         setIsOpen(false);
                         navigate(msg.action.route);
@@ -496,18 +584,19 @@ export default function AIChatBot() {
                       style={{
                         marginTop: '10px', width: '100%', padding: '8px 12px',
                         background: 'rgba(124, 169, 146, 0.15)',
-                        color: '#7CA992', border: '1px solid rgba(124, 169, 146, 0.3)',
+                        color: '#A3C7B5', border: '1px solid rgba(124, 169, 146, 0.3)',
                         borderRadius: '8px', fontSize: '12px', fontWeight: '700',
                         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
                       }}
                     >
-                      <span>👉 {msg.action.label}</span>
+                      <span aria-hidden="true">👉</span>
+                      <span>{msg.action.label}</span>
                     </button>
                   )}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', padding: '0 4px' }}>
-                  <span style={{ fontSize: '10px', color: '#9CAEA4', fontWeight: '500' }}>
+                  <span style={{ fontSize: '10px', color: '#B5C5BC', fontWeight: '500' }}>
                     {msg.time}
                   </span>
                 </div>
@@ -515,15 +604,19 @@ export default function AIChatBot() {
             ))}
 
             {isTyping && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
-                backgroundColor: '#191C1A', borderRadius: '14px', width: 'fit-content',
-                border: '1px solid rgba(255, 255, 255, 0.08)'
-              }}>
-                <span style={{ fontSize: '12px', color: '#7CA992', fontWeight: '700' }}>Thinking</span>
-                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite' }} />
-                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.2s' }} />
-                <span className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.4s' }} />
+              <div
+                role="status"
+                aria-label="SignBot is thinking"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+                  backgroundColor: '#191C1A', borderRadius: '14px', width: 'fit-content',
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}
+              >
+                <span style={{ fontSize: '12px', color: '#A3C7B5', fontWeight: '700' }}>Thinking</span>
+                <span aria-hidden="true" className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite' }} />
+                <span aria-hidden="true" className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.2s' }} />
+                <span aria-hidden="true" className="dot" style={{ width: '6px', height: '6px', backgroundColor: '#7CA992', borderRadius: '50%', animation: 'dotPulse 1.2s infinite 0.4s' }} />
               </div>
             )}
 
@@ -536,20 +629,28 @@ export default function AIChatBot() {
             display: 'flex', alignItems: 'center', gap: '10px'
           }}>
             <button
+              type="button"
               onClick={toggleVoiceInput}
+              aria-label={isListening ? 'Stop voice input' : 'Speak your question'}
+              aria-pressed={isListening}
               title="Speak Question"
               style={{
                 backgroundColor: isListening ? '#ef4444' : '#242A27',
-                color: isListening ? '#ffffff' : '#7CA992',
-                border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '50%', width: '38px', height: '38px',
+                color: isListening ? '#ffffff' : '#A3C7B5',
+                border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '50%', width: '38px', height: '38px',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '16px', flexShrink: 0
               }}
             >
-              🎙️
+              <span aria-hidden="true">🎙️</span>
             </button>
 
+            <label htmlFor="signbot-message-input" className="sr-only">
+              Ask SignBot a question
+            </label>
             <input
+              ref={inputRef}
+              id="signbot-message-input"
               type="text"
               placeholder={isListening ? "Listening... Speak now!" : "Ask ANY question..."}
               value={inputText}
@@ -561,25 +662,27 @@ export default function AIChatBot() {
                 }
               }}
               style={{
-                flex: 1, padding: '10px 14px', borderRadius: '20px', border: '1px solid rgba(255, 255, 255, 0.1)',
+                flex: 1, padding: '10px 14px', borderRadius: '20px', border: '1px solid rgba(255, 255, 255, 0.16)',
                 backgroundColor: '#242A27', color: '#E4EAE6',
-                fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box'
+                fontSize: '13px', fontFamily: 'inherit', boxSizing: 'border-box'
               }}
             />
 
             <button
+              type="button"
               onClick={() => handleSend()}
               disabled={!inputText.trim() || isTyping}
+              aria-label="Send message"
               style={{
                 background: inputText.trim() && !isTyping ? '#7CA992' : 'rgba(255, 255, 255, 0.1)',
-                color: inputText.trim() && !isTyping ? '#191C1A' : '#9CAEA4',
+                color: inputText.trim() && !isTyping ? '#191C1A' : '#B5C5BC',
                 border: 'none', borderRadius: '50%', width: '38px', height: '38px',
                 cursor: inputText.trim() && !isTyping ? 'pointer' : 'not-allowed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '15px', flexShrink: 0
               }}
             >
-              ➤
+              <span aria-hidden="true">➤</span>
             </button>
           </div>
         </div>

@@ -6,9 +6,6 @@
 
 <title>SiGML Player Applet loc.2017</title>
 
-<meta http-equiv="Access-Control-Allow-Origin" content="*">
-<meta http-equiv="Access-Control-Allow-Methods" content="GET">
-
 <link rel="stylesheet" href="https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/cwa/cwasa.css" />
 <style>
   html, body {
@@ -78,25 +75,35 @@ function stopPlayer() {
 	}
 }
 
-function setSiGMLURL(sigmlURL) {
-	if (!sigmlURL) return "";
-	var url = String(sigmlURL).trim();
-	if (!url.startsWith("http://") && !url.startsWith("https://")) {
-		var loc = window.location.href;
-		var locDir = loc.substring(0, loc.lastIndexOf('/'));
-		if (url.startsWith('/')) {
-			url = url.substring(1);
-		}
-		url = locDir + "/" + url;
+function isSafeSigmlPath(sigmlURL) {
+	if (!sigmlURL || typeof sigmlURL !== "string") return false;
+	var trimmed = sigmlURL.trim();
+	if (!trimmed || trimmed.length > 300 || trimmed.indexOf("..") !== -1) return false;
+	var lower = trimmed.toLowerCase();
+	if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("//") || lower.startsWith("javascript:") || lower.startsWith("data:")) {
+		return false;
 	}
+	return lower.endsWith(".sigml");
+}
+
+function setSiGMLURL(sigmlURL) {
+	if (!isSafeSigmlPath(sigmlURL)) return "";
+	var url = String(sigmlURL).trim();
+	var loc = window.location.href;
+	var locDir = loc.substring(0, loc.lastIndexOf('/'));
+	if (url.startsWith('/')) {
+		url = url.substring(1);
+	}
+	url = locDir + "/" + url;
 	var urlEl = document.getElementById("URLText");
 	if (urlEl) urlEl.value = url;
 	return url;
 }
 
 function startPlayer(sigmlURL) {
-	if (!sigmlURL) return;
+	if (!isSafeSigmlPath(sigmlURL)) return;
 	var fullUrl = setSiGMLURL(sigmlURL);
+	if (!fullUrl) return;
 	
 	// Fetch the SiGML content directly, sanitize any BOM, XML declaration, or rogue prolog comments:
 	fetch(fullUrl)
@@ -139,12 +146,14 @@ function startPlayer(sigmlURL) {
 		});
 }
 
-// Global window message listener for cross-frame commands from React iframe
+// Global window message listener for cross-frame commands from same-origin React parent
 window.addEventListener('message', function(event) {
 	if (!event || !event.data) return;
+	if (event.origin && event.origin !== window.location.origin) return;
 	
 	if (event.data && event.data.type === 'PLAY_SIGML') {
-		const sigmlUrl = event.data.payload || event.data.file || event.data.url;
+		var sigmlUrl = event.data.payload || event.data.file || event.data.url;
+		if (!isSafeSigmlPath(sigmlUrl)) return;
 		// CWASA specific call to play the file
 		if (typeof CWASA !== 'undefined') {
 			if (typeof startPlayer === 'function') {
@@ -152,8 +161,6 @@ window.addEventListener('message', function(event) {
 			} else if (typeof CWASA.playSiGMLURL === 'function') {
 				CWASA.playSiGMLURL(sigmlUrl);
 			}
-		} else {
-			console.log("CWASA player not loaded yet. Target file:", sigmlUrl);
 		}
 		return;
 	}
@@ -162,13 +169,15 @@ window.addEventListener('message', function(event) {
 	if (typeof data === "object") {
 		if (data.type === "START_PLAYER") {
 			var file = data.file || data.url || data.sigml;
-			if (file) startPlayer(file);
+			if (isSafeSigmlPath(file)) startPlayer(file);
 		} else if (data.type === "STOP_PLAYER" || data.type === "STOP_SIGML") {
 			stopPlayer();
 		} else if (data.type === "PLAY_TEXT") {
-			if (data.text) playText(data.text);
+			if (typeof data.text === "string" && data.text.indexOf("<sigml") !== -1) {
+				playText(data.text);
+			}
 		}
-	} else if (typeof data === "string" && (data.includes(".sigml") || data.startsWith("SignFiles/"))) {
+	} else if (typeof data === "string" && isSafeSigmlPath(data)) {
 		startPlayer(data);
 	}
 });
@@ -190,7 +199,7 @@ setInterval(function() {
 				type: "CWASA_GLOSS_UPDATE",
 				gloss: currentGloss,
 				signFrame: currentSF
-			}, "*");
+			}, window.location.origin);
 		}
 	}
 }, 80);

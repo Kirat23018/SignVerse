@@ -26,14 +26,29 @@ export function cleanSiGML(rawText) {
   return clean.replace(/<sigml>\s*-->/gi, '<sigml>');
 }
 
-// Normalize any file reference to a clean relative path
+// Normalize any file reference to a safe, clean relative path
 export function resolveSigmlPath(fileOrItem) {
   if (!fileOrItem) return '';
   const rawFile = typeof fileOrItem === 'string' ? fileOrItem : (fileOrItem.file || fileOrItem.label || '');
   let file = String(rawFile).trim();
+  if (!file) return '';
 
-  // Strip leading slash
-  if (file.startsWith('/')) file = file.slice(1);
+  // Reject absolute external URLs, protocol-relative URLs, dangerous schemes, and path traversal
+  const lower = file.toLowerCase();
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('//') ||
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    file.includes('..')
+  ) {
+    return '';
+  }
+
+  // Strip leading slashes
+  file = file.replace(/^\/+/, '');
+  if (!file) return '';
 
   if (file.endsWith('.sigml')) {
     return file;
@@ -75,6 +90,7 @@ export async function playSiGMLFast(iframeElement, fileOrItem, speedMultiplier =
   if (!path) return false;
 
   const cw = iframeElement.contentWindow;
+  const targetOrigin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '*';
 
   // 1. Check in-memory cache for INSTANT 0ms execution
   if (sigmlMemoryCache.has(path)) {
@@ -83,11 +99,11 @@ export async function playSiGMLFast(iframeElement, fileOrItem, speedMultiplier =
       if (typeof cw.playText === 'function') {
         cw.playText(cachedText);
       } else {
-        cw.postMessage({ type: 'PLAY_TEXT', text: cachedText, file: path, payload: path, speed: speedMultiplier }, '*');
+        cw.postMessage({ type: 'PLAY_TEXT', text: cachedText, file: path, payload: path, speed: speedMultiplier }, targetOrigin);
       }
       return true;
     } catch {
-      cw.postMessage({ type: 'PLAY_TEXT', text: cachedText, file: path, payload: path, speed: speedMultiplier }, '*');
+      cw.postMessage({ type: 'PLAY_TEXT', text: cachedText, file: path, payload: path, speed: speedMultiplier }, targetOrigin);
       return true;
     }
   }
@@ -97,10 +113,10 @@ export async function playSiGMLFast(iframeElement, fileOrItem, speedMultiplier =
     if (typeof cw.startPlayer === 'function') {
       cw.startPlayer(path);
     } else {
-      cw.postMessage({ type: 'PLAY_SIGML', file: path, payload: path, speed: speedMultiplier }, '*');
+      cw.postMessage({ type: 'PLAY_SIGML', file: path, payload: path, speed: speedMultiplier }, targetOrigin);
     }
   } catch {
-    cw.postMessage({ type: 'PLAY_SIGML', file: path, payload: path, speed: speedMultiplier }, '*');
+    cw.postMessage({ type: 'PLAY_SIGML', file: path, payload: path, speed: speedMultiplier }, targetOrigin);
   }
 
   // 3. Cache it in background for all subsequent plays

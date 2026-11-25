@@ -1,35 +1,45 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { resolveSigmlPath } from '../utils/sigmlService';
 
 /**
  * CWASA3DAvatar - 3D WebGL Sign Language Avatar Renderer
- * Communicates with the public/player-applet.html CWASA runtime via postMessage
+ * Communicates with the public/player-applet.html CWASA runtime via same-origin postMessage
  */
 export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height = '360px' }) {
   const iframeRef = useRef(null);
+  const timerRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isIframeLoaded, setIsIframeLoaded] = useState(false);
   const [speed, setSpeed] = useState(1.0); // 1.0 = normal, 1.5 = slow
 
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   const sendPlayCommand = useCallback((sigmlFile) => {
-    if (!sigmlFile || !iframeRef.current || !iframeRef.current.contentWindow) return;
+    const safePath = resolveSigmlPath(sigmlFile);
+    if (!safePath || !iframeRef.current || !iframeRef.current.contentWindow) return;
     setIsPlaying(true);
 
+    const targetOrigin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '*';
     try {
       iframeRef.current.contentWindow.postMessage(
         {
           type: 'PLAY_SIGML',
-          payload: sigmlFile,
-          file: sigmlFile,
-          speed: speed
+          payload: safePath,
+          file: safePath,
+          speed
         },
-        '*'
+        targetOrigin
       );
-    } catch (err) {
-      console.warn('[CWASA3DAvatar] postMessage error:', err);
+    } catch {
+      // Safe non-fatal postMessage fallback
     }
 
-    // Auto-reset playing animation status after gesture duration
-    setTimeout(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
       setIsPlaying(false);
     }, 2400);
   }, [speed]);
@@ -82,11 +92,12 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span
+            aria-hidden="true"
             style={{
               width: '10px',
               height: '10px',
               borderRadius: '50%',
-              backgroundColor: isPlaying ? '#10b981' : '#64748b',
+              backgroundColor: isPlaying ? '#10b981' : '#94a3b8',
               boxShadow: isPlaying ? '0 0 10px #10b981' : 'none',
               transition: 'all 0.3s'
             }}
@@ -94,30 +105,34 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
           <span style={{ fontSize: '13px', fontWeight: '700', color: '#e2e8f0', letterSpacing: '0.3px' }}>
             3D Avatar: Luna
           </span>
-          {isPlaying && (
-            <span
-              style={{
-                fontSize: '11px',
-                backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                color: '#34d399',
-                padding: '2px 8px',
-                borderRadius: '10px',
-                fontWeight: '600'
-              }}
-            >
-              Signing...
-            </span>
-          )}
+          <span role="status" aria-live="polite">
+            {isPlaying && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                  color: '#6ee7b7',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontWeight: '600'
+                }}
+              >
+                Signing...
+              </span>
+            )}
+          </span>
         </div>
 
         {/* Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
-            onClick={() => setSpeed(s => (s === 1.0 ? 1.5 : 1.0))}
+            type="button"
+            onClick={() => setSpeed((s) => (s === 1.0 ? 1.5 : 1.0))}
+            aria-label={`Toggle playback speed, currently ${speed === 1.5 ? 'slow 1.5x' : 'normal 1.0x'}`}
             title="Toggle playback speed"
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.08)',
-              color: '#94a3b8',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              color: '#cbd5e1',
               border: 'none',
               padding: '4px 10px',
               borderRadius: '8px',
@@ -130,10 +145,12 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
           </button>
 
           <button
+            type="button"
             onClick={handleReplay}
             disabled={isPlaying}
+            aria-label={`Replay ${title} sign animation`}
             style={{
-              backgroundColor: '#10b981',
+              backgroundColor: '#059669',
               color: '#ffffff',
               border: 'none',
               padding: '5px 12px',
@@ -149,7 +166,7 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
               transition: 'background 0.2s'
             }}
           >
-            <span>🔄</span>
+            <span aria-hidden="true">🔄</span>
             <span>Replay Sign</span>
           </button>
         </div>
@@ -180,6 +197,8 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
         {/* Loading overlay while iframe initializes */}
         {!isIframeLoaded && (
           <div
+            role="status"
+            aria-live="polite"
             style={{
               position: 'absolute',
               inset: 0,
@@ -189,10 +208,11 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
               alignItems: 'center',
               justifyContent: 'center',
               gap: '12px',
-              color: '#94a39b'
+              color: '#cbd5e1'
             }}
           >
             <div
+              aria-hidden="true"
               style={{
                 width: '32px',
                 height: '32px',
@@ -212,15 +232,17 @@ export default function CWASA3DAvatar({ sigml, title = '3D Sign Gesture', height
         style={{
           padding: '8px 16px',
           backgroundColor: '#0b1329',
-          color: '#64748b',
+          color: '#cbd5e1',
           fontSize: '11.5px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
         }}
       >
-        <span>💡 Click & drag the avatar to rotate 360° | Scroll to zoom</span>
-        <span style={{ fontFamily: 'monospace', color: '#475569' }}>{sigml || 'none'}</span>
+        <span>
+          <span aria-hidden="true">💡 </span>Click &amp; drag the avatar to rotate 360° | Scroll to zoom
+        </span>
+        <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{sigml || 'none'}</span>
       </div>
     </div>
   );

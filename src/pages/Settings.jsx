@@ -250,6 +250,8 @@ export default function Settings() {
 
           {savedSuccess && (
             <div
+              role="status"
+              aria-live="polite"
               style={{
                 marginTop: '16px',
                 background: '#242A27',
@@ -264,7 +266,7 @@ export default function Settings() {
                 gap: '8px'
               }}
             >
-              <span>🌿</span>
+              <span aria-hidden="true">🌿</span>
               <span>Settings and hardware preferences saved successfully to browser storage.</span>
             </div>
           )}
@@ -330,11 +332,12 @@ export default function Settings() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#7CA992', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+              <label htmlFor="settings-camera-select" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#A3C7B5', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                 Active Webcam Hardware
               </label>
               
               <select
+                id="settings-camera-select"
                 value={settings.cameraId}
                 onChange={(e) => {
                   setSettings({ ...settings, cameraId: e.target.value });
@@ -347,11 +350,10 @@ export default function Settings() {
                   padding: '13px 18px',
                   borderRadius: '12px',
                   backgroundColor: '#191C1A',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
                   color: '#E4EAE6',
                   fontSize: '14px',
                   fontWeight: '600',
-                  outline: 'none',
                   cursor: 'pointer'
                 }}
               >
@@ -492,19 +494,23 @@ export default function Settings() {
               <span>1.00 (Strict)</span>
             </div>
 
+            <label htmlFor="settings-confidence-slider" className="sr-only">
+              AI Tracking Sensitivity threshold
+            </label>
             <input
+              id="settings-confidence-slider"
               type="range"
               min="0.1"
               max="1.0"
               step="0.05"
               value={settings.trackingConfidence}
+              aria-valuetext={`${Number(settings.trackingConfidence).toFixed(2)} — ${sensitivityInfo.text}`}
               onChange={(e) => setSettings({ ...settings, trackingConfidence: parseFloat(e.target.value) })}
               style={{
                 width: '100%',
                 height: '8px',
                 borderRadius: '4px',
                 background: 'rgba(255, 255, 255, 0.08)',
-                outline: 'none',
                 accentColor: '#7CA992',
                 cursor: 'pointer'
               }}
@@ -524,10 +530,10 @@ export default function Settings() {
           }}
         >
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#E4EAE6', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>✋</span>
+            <span aria-hidden="true">✋</span>
             <span>Hand Preference</span>
           </h2>
-          <p style={{ margin: '0 0 18px 0', fontSize: '13px', color: '#9CAEA4' }}>
+          <p style={{ margin: '0 0 18px 0', fontSize: '13px', color: '#B5C5BC' }}>
             Configures spatial thumb and finger orientation geometry to match your dominant signing hand.
           </p>
 
@@ -535,20 +541,21 @@ export default function Settings() {
             {/* Right Handed */}
             <button
               type="button"
+              aria-pressed={settings.handPreference === 'right'}
               onClick={() => setSettings({ ...settings, handPreference: 'right' })}
               style={{
                 padding: '16px 20px',
                 borderRadius: '14px',
                 background: settings.handPreference === 'right' ? 'rgba(124, 169, 146, 0.15)' : '#191C1A',
-                border: settings.handPreference === 'right' ? '1.5px solid #7CA992' : '1px solid rgba(255, 255, 255, 0.08)',
-                color: settings.handPreference === 'right' ? '#E4EAE6' : '#9CAEA4',
+                border: settings.handPreference === 'right' ? '1.5px solid #7CA992' : '1px solid rgba(255, 255, 255, 0.12)',
+                color: settings.handPreference === 'right' ? '#E4EAE6' : '#B5C5BC',
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '24px' }}>✋</span>
+                <span aria-hidden="true" style={{ fontSize: '24px' }}>✋</span>
                 {settings.handPreference === 'right' && (
                   <span style={{ fontSize: '11px', fontWeight: '800', color: '#191C1A', background: '#7CA992', padding: '2px 8px', borderRadius: '6px' }}>
                     ACTIVE
@@ -556,7 +563,7 @@ export default function Settings() {
                 )}
               </div>
               <div style={{ fontSize: '15px', fontWeight: '800', color: '#E4EAE6' }}>Right-Handed</div>
-              <div style={{ fontSize: '12px', color: '#9CAEA4', marginTop: '2px' }}>
+              <div style={{ fontSize: '12px', color: '#B5C5BC', marginTop: '2px' }}>
                 Standard geometric calibration (Default)
               </div>
             </button>
@@ -564,20 +571,21 @@ export default function Settings() {
             {/* Left Handed */}
             <button
               type="button"
+              aria-pressed={settings.handPreference === 'left'}
               onClick={() => setSettings({ ...settings, handPreference: 'left' })}
               style={{
                 padding: '16px 20px',
                 borderRadius: '14px',
                 background: settings.handPreference === 'left' ? 'rgba(124, 169, 146, 0.15)' : '#191C1A',
-                border: settings.handPreference === 'left' ? '1.5px solid #7CA992' : '1px solid rgba(255, 255, 255, 0.08)',
-                color: settings.handPreference === 'left' ? '#E4EAE6' : '#9CAEA4',
+                border: settings.handPreference === 'left' ? '1.5px solid #7CA992' : '1px solid rgba(255, 255, 255, 0.12)',
+                color: settings.handPreference === 'left' ? '#E4EAE6' : '#B5C5BC',
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '24px' }}>🤚</span>
+                <span aria-hidden="true" style={{ fontSize: '24px' }}>🤚</span>
                 {settings.handPreference === 'left' && (
                   <span style={{ fontSize: '11px', fontWeight: '800', color: '#191C1A', background: '#7CA992', padding: '2px 8px', borderRadius: '6px' }}>
                     ACTIVE
@@ -585,7 +593,7 @@ export default function Settings() {
                 )}
               </div>
               <div style={{ fontSize: '15px', fontWeight: '800', color: '#E4EAE6' }}>Left-Handed</div>
-              <div style={{ fontSize: '12px', color: '#9CAEA4', marginTop: '2px' }}>
+              <div style={{ fontSize: '12px', color: '#B5C5BC', marginTop: '2px' }}>
                 Inverted geometric thumb & angle detection
               </div>
             </button>
@@ -604,18 +612,19 @@ export default function Settings() {
           }}
         >
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#E4EAE6', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>⚡</span>
+            <span aria-hidden="true">⚡</span>
             <span>Avatar Render Speed</span>
           </h2>
-          <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#9CAEA4' }}>
+          <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#B5C5BC' }}>
             Control the 3D WebGL animation playback speed in Text-to-Sign drills and Academy lessons.
           </p>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#7CA992', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+            <label htmlFor="settings-avatar-speed" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#A3C7B5', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
               Playback Velocity
             </label>
             <select
+              id="settings-avatar-speed"
               value={settings.avatarSpeed}
               onChange={(e) => setSettings({ ...settings, avatarSpeed: parseFloat(e.target.value) })}
               style={{
@@ -623,11 +632,10 @@ export default function Settings() {
                 padding: '13px 18px',
                 borderRadius: '12px',
                 backgroundColor: '#191C1A',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.16)',
                 color: '#E4EAE6',
                 fontSize: '14px',
                 fontWeight: '600',
-                outline: 'none',
                 cursor: 'pointer'
               }}
             >
@@ -651,17 +659,18 @@ export default function Settings() {
           }}
         >
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#E4EAE6', margin: '0 0 18px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>🌐</span>
-            <span>Dialect & Display Overlays</span>
+            <span aria-hidden="true">🌐</span>
+            <span>Dialect &amp; Display Overlays</span>
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             {/* Dialect */}
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#7CA992', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+              <label htmlFor="settings-dialect-select" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#A3C7B5', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                 Primary Sign Language System
               </label>
               <select
+                id="settings-dialect-select"
                 value={settings.dialect}
                 onChange={(e) => setSettings({ ...settings, dialect: e.target.value })}
                 style={{
@@ -669,11 +678,10 @@ export default function Settings() {
                   padding: '13px 18px',
                   borderRadius: '12px',
                   backgroundColor: '#191C1A',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
                   color: '#E4EAE6',
                   fontSize: '14px',
                   fontWeight: '600',
-                  outline: 'none',
                   cursor: 'pointer'
                 }}
               >
@@ -687,11 +695,12 @@ export default function Settings() {
 
             {/* Skeleton Overlay */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+              <label htmlFor="settings-skeleton-toggle" style={{ cursor: 'pointer', flex: 1 }}>
                 <div style={{ fontSize: '14.5px', fontWeight: '700', color: '#E4EAE6' }}>Render 21 Landmark Joint Skeletons</div>
-                <div style={{ fontSize: '12.5px', color: '#9CAEA4' }}>Draw real-time joint connections over the live video.</div>
-              </div>
+                <div style={{ fontSize: '12.5px', color: '#B5C5BC' }}>Draw real-time joint connections over the live video.</div>
+              </label>
               <input
+                id="settings-skeleton-toggle"
                 type="checkbox"
                 checked={settings.skeletonOverlay}
                 onChange={(e) => setSettings({ ...settings, skeletonOverlay: e.target.checked })}
@@ -703,11 +712,12 @@ export default function Settings() {
 
             {/* Mirror Camera */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+              <label htmlFor="settings-mirror-toggle" style={{ cursor: 'pointer', flex: 1 }}>
                 <div style={{ fontSize: '14.5px', fontWeight: '700', color: '#E4EAE6' }}>Mirror Video Feed Horizontally</div>
-                <div style={{ fontSize: '12.5px', color: '#9CAEA4' }}>Flips webcam so left-right gestures match your natural mirror reflection.</div>
-              </div>
+                <div style={{ fontSize: '12.5px', color: '#B5C5BC' }}>Flips webcam so left-right gestures match your natural mirror reflection.</div>
+              </label>
               <input
+                id="settings-mirror-toggle"
                 type="checkbox"
                 checked={settings.cameraMirror}
                 onChange={(e) => setSettings({ ...settings, cameraMirror: e.target.checked })}

@@ -12,9 +12,12 @@ const CATEGORIES = [
   { id: 'verbs', label: 'Actions & Verbs' }
 ];
 
+const PAGE_SIZE = 120;
+
 export default function Words() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedWord, setSelectedWord] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [liveGloss, setLiveGloss] = useState('');
@@ -31,9 +34,10 @@ export default function Words() {
     }
   }, [allWords, selectedWord]);
 
-  // Listen for real-time CWASA gloss and frame broadcasts from iframe
+  // Listen for real-time CWASA gloss and frame broadcasts from iframe (same-origin verified)
   useEffect(() => {
     const handleMsg = (e) => {
+      if (e.origin && e.origin !== window.location.origin) return;
       if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
         if (e.data.gloss) setLiveGloss(e.data.gloss);
         if (e.data.signFrame) setLiveFrame(e.data.signFrame);
@@ -68,6 +72,15 @@ export default function Words() {
 
     return list;
   }, [allWords, selectedCategory, searchTerm]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [selectedCategory, searchTerm]);
+
+  const visibleWords = useMemo(
+    () => displayedWords.slice(0, visibleCount),
+    [displayedWords, visibleCount]
+  );
 
   // Ultra-Fast Word Trigger (< 1ms)
   const handleWordAction = useCallback((item) => {
@@ -138,21 +151,25 @@ export default function Words() {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-          <h2 style={{ color: '#003366', margin: 0, fontSize: '24px', fontWeight: '800' }}>
-            Sign Dictionary & Words
-          </h2>
-          <span style={{ fontSize: '12px', fontWeight: '700', backgroundColor: '#dcfce7', color: '#15803d', padding: '3px 9px', borderRadius: '12px' }}>
+          <h1 style={{ color: '#003366', margin: 0, fontSize: '24px', fontWeight: '800' }}>
+            Sign Dictionary &amp; Words
+          </h1>
+          <span style={{ fontSize: '12px', fontWeight: '700', backgroundColor: '#dcfce7', color: '#14532d', padding: '3px 9px', borderRadius: '12px' }}>
             {allWords.length}+ Words Ready
           </span>
         </div>
-        <p style={{ color: '#64748b', fontSize: '13.5px', marginBottom: '14px', lineHeight: '1.4' }}>
+        <p style={{ color: '#475569', fontSize: '13.5px', marginBottom: '14px', lineHeight: '1.4' }}>
           Select any word to instantly animate on the 3D avatar with live gloss and frame details.
         </p>
         
         {/* Fast Search Input */}
         <div style={{ position: 'relative', marginBottom: '14px' }}>
-          <input 
-            type="text"
+          <label htmlFor="words-search-input" className="sr-only">
+            Search sign dictionary words
+          </label>
+          <input
+            id="words-search-input"
+            type="search"
             placeholder="🔍 Search all words (e.g. Hello, Family, Apple, Friend)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -163,15 +180,17 @@ export default function Words() {
               border: '1.5px solid #cbd5e1',
               boxSizing: 'border-box',
               fontSize: '14.5px',
-              outline: 'none',
               transition: 'border-color 0.2s',
-              backgroundColor: '#f8fafc'
+              backgroundColor: '#f8fafc',
+              color: '#0f172a'
             }}
             onFocus={(e) => e.target.style.borderColor = '#003366'}
             onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
           />
           {searchTerm && (
             <button
+              type="button"
+              aria-label="Clear search query"
               onClick={() => setSearchTerm('')}
               style={{
                 position: 'absolute',
@@ -180,18 +199,20 @@ export default function Words() {
                 transform: 'translateY(-50%)',
                 background: 'none',
                 border: 'none',
-                color: '#94a3b8',
+                color: '#475569',
                 cursor: 'pointer',
                 fontWeight: 'bold'
               }}
             >
-              ✕
+              <span aria-hidden="true">✕</span>
             </button>
           )}
         </div>
 
         {/* Category Pill Filters */}
         <div
+          role="group"
+          aria-label="Filter vocabulary by category"
           style={{
             display: 'flex',
             gap: '6px',
@@ -205,14 +226,16 @@ export default function Words() {
             const isCatActive = selectedCategory === cat.id;
             return (
               <button
+                type="button"
                 key={cat.id}
+                aria-pressed={isCatActive}
                 onClick={() => setSelectedCategory(cat.id)}
                 style={{
                   padding: '6px 12px',
                   borderRadius: '16px',
-                  border: isCatActive ? '1px solid #003366' : '1px solid #e2e8f0',
+                  border: isCatActive ? '1px solid #003366' : '1px solid #cbd5e1',
                   backgroundColor: isCatActive ? '#003366' : '#ffffff',
-                  color: isCatActive ? '#ffffff' : '#475569',
+                  color: isCatActive ? '#ffffff' : '#334155',
                   fontSize: '12px',
                   fontWeight: '700',
                   cursor: 'pointer',
@@ -228,11 +251,11 @@ export default function Words() {
 
         {/* Word Counter Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>
+          <span role="status" aria-live="polite" style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>
             SHOWING {displayedWords.length} SIGNS
           </span>
-          <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-            Click or use ↑ ↓ & Enter
+          <span style={{ fontSize: '11px', color: '#475569' }}>
+            Click or use ↑ ↓ &amp; Enter
           </span>
         </div>
 
@@ -247,57 +270,71 @@ export default function Words() {
             paddingRight: '6px' 
           }}
         >
-          {displayedWords.length > 0 ? (
-            displayedWords.map((item, index) => {
-              const isSelected = selectedWord && selectedWord.label.toLowerCase() === item.label.toLowerCase();
-              return (
-                <div
-                  key={`${item.label}-${index}`}
-                  tabIndex={0} 
-                  role="button"
-                  onClick={() => handleWordAction(item)}
-                  onKeyDown={(e) => handleKeyDown(e, item)}
-                  style={{
-                    minHeight: '44px',
-                    padding: '10px 12px', 
-                    borderRadius: '8px', 
-                    cursor: 'pointer', 
-                    fontSize: '15px', 
-                    fontWeight: 'bold',
-                    fontFamily: '"Times New Roman", Times, serif',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    backgroundColor: isSelected ? '#15803d' : '#ffffff',
-                    color: isSelected ? '#ffffff' : '#14532d',
-                    border: isSelected ? '2px solid #166534' : '1.5px solid #cbd5e1',
-                    transition: 'all 0.15s ease',
-                    outline: 'none',
-                    boxShadow: isSelected ? '0 4px 10px rgba(21, 128, 61, 0.3)' : '0 1px 3px rgba(0,0,0,0.04)',
-                    userSelect: 'none',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = '#ecfdf5';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = '#ffffff';
-                  }}
-                  onFocus={(e) => e.target.style.boxShadow = '0 0 0 2px #16a34a'}
-                  onBlur={(e) => e.target.style.boxShadow = isSelected ? '0 4px 10px rgba(21, 128, 61, 0.3)' : 'none'}
-                >
-                  {item.label}
+          {visibleWords.length > 0 ? (
+            <>
+              {visibleWords.map((item, index) => {
+                const isSelected = selectedWord && selectedWord.label.toLowerCase() === item.label.toLowerCase();
+                return (
+                  <button
+                    type="button"
+                    key={`${item.label}-${index}`}
+                    aria-pressed={isSelected}
+                    onClick={() => handleWordAction(item)}
+                    onKeyDown={(e) => handleKeyDown(e, item)}
+                    style={{
+                      minHeight: '44px',
+                      padding: '10px 12px', 
+                      borderRadius: '8px', 
+                      cursor: 'pointer', 
+                      fontSize: '15px', 
+                      fontWeight: 'bold',
+                      fontFamily: '"Times New Roman", Times, serif',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      textAlign: 'center',
+                      backgroundColor: isSelected ? '#15803d' : '#ffffff',
+                      color: isSelected ? '#ffffff' : '#14532d',
+                      border: isSelected ? '2px solid #166534' : '1.5px solid #cbd5e1',
+                      transition: 'all 0.15s ease',
+                      boxShadow: isSelected ? '0 4px 10px rgba(21, 128, 61, 0.3)' : '0 1px 3px rgba(0,0,0,0.04)',
+                      userSelect: 'none',
+                      wordBreak: 'break-word',
+                      lineHeight: '1.2'
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+              {displayedWords.length > visibleCount && (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '12px 0' }}>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                    style={{
+                      backgroundColor: '#003366',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '10px 20px',
+                      borderRadius: '10px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Load More Signs ({displayedWords.length - visibleCount} remaining)
+                  </button>
                 </div>
-              );
-            })
+              )}
+            </>
           ) : (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 10px', color: '#94a3b8' }}>
-              <p style={{ margin: 0, fontSize: '15px' }}>No words match "{searchTerm}".</p>
+            <div role="status" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 10px', color: '#475569' }}>
+              <p style={{ margin: 0, fontSize: '15px' }}>No words match &quot;{searchTerm}&quot;.</p>
               <button
+                type="button"
                 onClick={() => { setSearchTerm(''); setSelectedCategory('all'); }}
-                style={{ marginTop: '10px', backgroundColor: '#e2e8f0', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', color: '#334155' }}
+                style={{ marginTop: '10px', backgroundColor: '#e2e8f0', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', color: '#1e293b' }}
               >
                 Clear Filters
               </button>

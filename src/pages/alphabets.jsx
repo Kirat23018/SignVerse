@@ -66,9 +66,10 @@ export default function Alphabets() {
   const iframeRef = useRef(null);
   const isIframeReady = useRef(false);
 
-  // Listen for real-time CWASA gloss and frame broadcasts
+  // Listen for real-time CWASA gloss and frame broadcasts (same-origin verified)
   useEffect(() => {
     const handleMsg = (e) => {
+      if (e.origin && e.origin !== window.location.origin) return;
       if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
         if (e.data.gloss) setLiveGloss(e.data.gloss);
         if (e.data.signFrame) setLiveFrame(e.data.signFrame);
@@ -85,7 +86,12 @@ export default function Alphabets() {
     const path = item.file;
 
     const iframe = iframeRef.current;
-    if (!iframe || !iframe.contentWindow) return;
+    if (!iframe || !iframe.contentWindow) {
+      setIsPlaying(false);
+      return;
+    }
+
+    const targetOrigin = window.location.origin;
 
     // Check if already in memory cache
     let text = sigmlCache.get(path);
@@ -100,10 +106,10 @@ export default function Alphabets() {
           if (typeof iframe.contentWindow.playText === 'function') {
             iframe.contentWindow.playText(text);
           } else {
-            iframe.contentWindow.postMessage({ type: 'PLAY_TEXT', text }, '*');
+            iframe.contentWindow.postMessage({ type: 'PLAY_TEXT', text }, targetOrigin);
           }
         } catch {
-          iframe.contentWindow.postMessage({ type: 'PLAY_TEXT', text }, '*');
+          iframe.contentWindow.postMessage({ type: 'PLAY_TEXT', text }, targetOrigin);
         }
       } else {
         // Fallback to URL if fetch failed
@@ -111,10 +117,10 @@ export default function Alphabets() {
           if (typeof iframe.contentWindow.startPlayer === 'function') {
             iframe.contentWindow.startPlayer(path);
           } else {
-            iframe.contentWindow.postMessage({ type: 'PLAY_SIGML', file: path }, '*');
+            iframe.contentWindow.postMessage({ type: 'PLAY_SIGML', file: path }, targetOrigin);
           }
         } catch {
-          iframe.contentWindow.postMessage({ type: 'PLAY_SIGML', file: path }, '*');
+          iframe.contentWindow.postMessage({ type: 'PLAY_SIGML', file: path }, targetOrigin);
         }
       }
     }
@@ -230,15 +236,15 @@ export default function Alphabets() {
       >
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <h2 style={{ color: '#003366', margin: 0, fontSize: '24px', fontWeight: '800' }}>
+            <h1 style={{ color: '#003366', margin: 0, fontSize: '24px', fontWeight: '800' }}>
               Learn Sign Alphabets (A-Z)
-            </h2>
+            </h1>
             <span style={{ fontSize: '12px', fontWeight: '600', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '3px 8px', borderRadius: '12px' }}>
               ⚡ Fast Mode
             </span>
           </div>
 
-          <p style={{ color: '#64748b', fontSize: '13.5px', marginBottom: '14px', textAlign: 'left', lineHeight: '1.4' }}>
+          <p style={{ color: '#475569', fontSize: '13.5px', marginBottom: '14px', textAlign: 'left', lineHeight: '1.4' }}>
             Click any alphabet or simply <strong>press any key (A–Z) on your keyboard</strong> to watch its 3D animation instantly.
           </p>
 
@@ -246,6 +252,7 @@ export default function Alphabets() {
           <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
             <button
               type="button"
+              aria-pressed={handMode === 'double'}
               onClick={() => handleModeChange('double')}
               style={{
                 flex: 1,
@@ -255,16 +262,17 @@ export default function Alphabets() {
                 fontWeight: '700',
                 border: handMode === 'double' ? '2px solid #003366' : '1px solid #cbd5e1',
                 backgroundColor: handMode === 'double' ? '#003366' : '#ffffff',
-                color: handMode === 'double' ? '#ffffff' : '#475569',
+                color: handMode === 'double' ? '#ffffff' : '#334155',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
                 boxShadow: handMode === 'double' ? '0 2px 6px rgba(0,51,102,0.2)' : 'none'
               }}
             >
-              🤲 Double Handed (ISL)
+              <span aria-hidden="true">🤲 </span>Double Handed (ISL)
             </button>
             <button
               type="button"
+              aria-pressed={handMode === 'single'}
               onClick={() => handleModeChange('single')}
               style={{
                 flex: 1,
@@ -274,59 +282,44 @@ export default function Alphabets() {
                 fontWeight: '700',
                 border: handMode === 'single' ? '2px solid #003366' : '1px solid #cbd5e1',
                 backgroundColor: handMode === 'single' ? '#003366' : '#ffffff',
-                color: handMode === 'single' ? '#ffffff' : '#475569',
+                color: handMode === 'single' ? '#ffffff' : '#334155',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
                 boxShadow: handMode === 'single' ? '0 2px 6px rgba(0,51,102,0.2)' : 'none'
               }}
             >
-              ✋ Single Handed
+              <span aria-hidden="true">✋ </span>Single Handed
             </button>
           </div>
 
           {/* Responsive Alphabet Grid */}
-          <div className="signverse-alpha-grid">
+          <div className="signverse-alpha-grid" role="group" aria-label="Alphabet signs A to Z">
             {alphabetList.map((item) => {
               const isSelected = activeItem && activeItem.label === item.label;
               return (
-                <div
+                <button
                   key={item.label}
-                  tabIndex={0}
-                  role="button"
+                  type="button"
                   aria-label={`Letter ${item.label}`}
+                  aria-pressed={isSelected}
                   onClick={() => selectAlphabet(item)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      selectAlphabet(item);
-                    }
-                  }}
                   style={{
                     padding: '14px 0',
                     fontSize: '18px',
                     fontWeight: '800',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    border: isSelected ? '2px solid #4d7c0f' : '1px solid #e2e8f0',
-                    backgroundColor: isSelected ? '#689f38' : '#ffffff',
-                    color: isSelected ? '#ffffff' : '#1e293b',
+                    border: isSelected ? '2px solid #3f6212' : '1px solid #cbd5e1',
+                    backgroundColor: isSelected ? '#4d7c0f' : '#ffffff',
+                    color: isSelected ? '#ffffff' : '#0f172a',
                     textAlign: 'center',
-                    boxShadow: isSelected ? '0 4px 10px rgba(104,159,56,0.35)' : '0 1px 3px rgba(0,0,0,0.04)',
+                    boxShadow: isSelected ? '0 4px 10px rgba(77,124,15,0.35)' : '0 1px 3px rgba(0,0,0,0.04)',
                     transition: 'all 0.12s ease',
-                    outline: 'none',
                     userSelect: 'none'
                   }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = '#f1f5f9';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = '#ffffff';
-                  }}
-                  onFocus={(e) => e.target.style.boxShadow = '0 0 0 3px #003366'}
-                  onBlur={(e) => e.target.style.boxShadow = isSelected ? '0 4px 10px rgba(104,159,56,0.35)' : '0 1px 3px rgba(0,0,0,0.04)'}
                 >
                   {item.label}
-                </div>
+                </button>
               );
             })}
           </div>

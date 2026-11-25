@@ -363,10 +363,10 @@ export default function Home() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h3 style={{ margin: '0 0 6px 0', fontSize: '22px', fontWeight: '800', color: '#E4EAE6' }}>
+              <h2 style={{ margin: '0 0 6px 0', fontSize: '22px', fontWeight: '800', color: '#E4EAE6' }}>
                 Meet Our 3D Sign Instructors
-              </h3>
-              <p style={{ margin: 0, fontSize: '14px', color: '#9CAEA4' }}>
+              </h2>
+              <p style={{ margin: 0, fontSize: '14px', color: '#B5C5BC' }}>
                 Comfortable digital avatars built for lifelike fingerspelling and body motion.
               </p>
             </div>
@@ -454,11 +454,11 @@ export default function Home() {
               onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(124, 169, 146, 0.4)'}
               onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
             >
-              <div style={{ fontSize: '28px', marginBottom: '12px' }}>🎯</div>
-              <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
+              <div aria-hidden="true" style={{ fontSize: '28px', marginBottom: '12px' }}>🎯</div>
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
                 Curated Learning Paths
-              </h4>
-              <p style={{ margin: 0, fontSize: '13px', color: '#9CAEA4', lineHeight: '1.5' }}>
+              </h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#B5C5BC', lineHeight: '1.5' }}>
                 Dual-track modular lessons with interactive quizzes and rank progression.
               </p>
             </div>
@@ -477,11 +477,11 @@ export default function Home() {
               onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(124, 169, 146, 0.4)'}
               onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
             >
-              <div style={{ fontSize: '28px', marginBottom: '12px' }}>⚡</div>
-              <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
+              <div aria-hidden="true" style={{ fontSize: '28px', marginBottom: '12px' }}>⚡</div>
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
                 Spaced Practice Studio
-              </h4>
-              <p style={{ margin: 0, fontSize: '13px', color: '#9CAEA4', lineHeight: '1.5' }}>
+              </h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#B5C5BC', lineHeight: '1.5' }}>
                 Strengthen your sign recall with interactive flashcards and self-paced ratings.
               </p>
             </div>
@@ -500,11 +500,11 @@ export default function Home() {
               onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(124, 169, 146, 0.4)'}
               onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
             >
-              <div style={{ fontSize: '28px', marginBottom: '12px' }}>🏆</div>
-              <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
+              <div aria-hidden="true" style={{ fontSize: '28px', marginBottom: '12px' }}>🏆</div>
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
                 Ranked Quizzes
-              </h4>
-              <p style={{ margin: 0, fontSize: '13px', color: '#9CAEA4', lineHeight: '1.5' }}>
+              </h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#B5C5BC', lineHeight: '1.5' }}>
                 Challenge your visual comprehension against the clock and climb leaderboard ranks.
               </p>
             </div>
@@ -523,11 +523,11 @@ export default function Home() {
               onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(124, 169, 146, 0.4)'}
               onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
             >
-              <div style={{ fontSize: '28px', marginBottom: '12px' }}>💎</div>
-              <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
+              <div aria-hidden="true" style={{ fontSize: '28px', marginBottom: '12px' }}>💎</div>
+              <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '800', color: '#E4EAE6' }}>
                 Progress Suite
-              </h4>
-              <p style={{ margin: 0, fontSize: '13px', color: '#9CAEA4', lineHeight: '1.5' }}>
+              </h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#B5C5BC', lineHeight: '1.5' }}>
                 Monitor your daily streaks, accuracy trajectories, and unlocked signer achievements.
               </p>
             </div>

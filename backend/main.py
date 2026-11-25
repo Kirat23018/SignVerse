@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import os
 import time
 from typing import Optional
 
@@ -15,19 +16,38 @@ from gesture_detector import HandGestureDetector
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("SignToTextServer")
 
+MAX_FRAME_PAYLOAD_CHARS = 2_800_000
+MAX_DECODED_BYTES = 2 * 1024 * 1024
+MAX_IMAGE_DIMENSION = 2048
+
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://sign-verse-tau.vercel.app",
+]
+
+
+def get_allowed_origins() -> list[str]:
+    raw = os.getenv("ALLOWED_ORIGINS", "")
+    if not raw.strip():
+        return DEFAULT_ALLOWED_ORIGINS
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return [o for o in origins if o != "*"] or DEFAULT_ALLOWED_ORIGINS
+
+
 app = FastAPI(
     title="SignVerse Sign-to-Text Recognition API",
     description="Real-time static sign gesture detection powered by OpenCV, MediaPipe, and landmark geometry",
     version="1.0.0",
 )
 
-# Enable CORS for Next.js frontend (standard ports 3000, 5173, etc.)
+# Restrict CORS to explicit trusted origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=get_allowed_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 # Initialize HandGestureDetector
@@ -81,18 +101,37 @@ def health_check():
 def decode_base64_frame(data_str: str) -> Optional[np.ndarray]:
     """
     Decodes base64 string (handles data URL scheme like 'data:image/jpeg;base64,...').
+    Enforces strict size and dimension limits to prevent memory exhaustion / DoS.
     Returns OpenCV BGR image or None.
     """
     try:
+        if not isinstance(data_str, str) or not data_str:
+            return None
+        if len(data_str) > MAX_FRAME_PAYLOAD_CHARS:
+            logger.warning("Rejected oversized frame payload")
+            return None
+
         if "," in data_str:
             data_str = data_str.split(",", 1)[1]
-        
-        image_bytes = base64.b64decode(data_str)
+
+        image_bytes = base64.b64decode(data_str, validate=True)
+        if not image_bytes or len(image_bytes) > MAX_DECODED_BYTES:
+            logger.warning("Rejected invalid or oversized decoded image buffer")
+            return None
+
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return None
+
+        height, width = frame.shape[:2]
+        if height <= 0 or width <= 0 or height > MAX_IMAGE_DIMENSION or width > MAX_IMAGE_DIMENSION:
+            logger.warning("Rejected frame with invalid dimensions: %sx%s", width, height)
+            return None
+
         return frame
-    except Exception as e:
-        logger.warning(f"Error decoding base64 image: {e}")
+    except Exception:
+        logger.warning("Error decoding base64 image")
         return None
 
 
@@ -103,17 +142,24 @@ async def websocket_sign_endpoint(websocket: WebSocket):
     WebSocket endpoint that receives webcam frames (10 FPS) encoded as base64,
     processes hand landmarks with MediaPipe, and streams detected gesture immediately.
     """
+    origin = websocket.headers.get("origin")
+    if origin and origin not in get_allowed_origins():
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
-    logger.info(f"Client connected from {websocket.client.host}:{websocket.client.port}")
+    client_host = websocket.client.host if websocket.client else "unknown"
+    client_port = websocket.client.port if websocket.client else 0
+    logger.info("Client connected from %s:%s", client_host, client_port)
 
     tracker = None
     try:
         tracker = get_hands_tracker()
     except Exception as e:
-        logger.error(f"Cannot process gestures without MediaPipe: {e}")
+        logger.error("Cannot process gestures without MediaPipe: %s", e)
         await websocket.send_json({
             "status": "error",
-            "message": f"MediaPipe initialization error: {str(e)}",
+            "message": "Vision pipeline unavailable. Please try again later.",
             "text": "",
             "gesture": "None"
         })
@@ -127,15 +173,27 @@ async def websocket_sign_endpoint(websocket: WebSocket):
         while True:
             # Receive raw text or JSON frame from client
             raw_msg = await websocket.receive_text()
-            
+            if len(raw_msg) > MAX_FRAME_PAYLOAD_CHARS:
+                await websocket.send_json({
+                    "status": "payload_too_large",
+                    "text": "",
+                    "gesture": "None",
+                    "confidence": 0.0,
+                    "landmarks_detected": False
+                })
+                continue
+
             # Extract base64 image payload
             base64_payload = raw_msg
             if raw_msg.startswith("{"):
                 try:
                     parsed = json.loads(raw_msg)
-                    base64_payload = parsed.get("image") or parsed.get("frame") or ""
+                    if isinstance(parsed, dict):
+                        base64_payload = parsed.get("image") or parsed.get("frame") or ""
+                    else:
+                        base64_payload = ""
                 except Exception:
-                    pass
+                    base64_payload = ""
 
             if not base64_payload:
                 await websocket.send_json({
@@ -220,4 +278,5 @@ async def websocket_sign_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    dev_reload = os.getenv("SIGNVERSE_DEV_RELOAD", "false").lower() == "true"
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=dev_reload)

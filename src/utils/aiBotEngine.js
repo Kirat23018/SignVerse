@@ -1,6 +1,7 @@
 /**
  * Real-Time AI Chatbot Intelligence Engine for SignVerse
- * Powered by Groq Cloud & Google Gemini API with fallback & thought-stripping.
+ * Routes requests through the secure /api/chat server proxy (keeping API keys off the client)
+ * with resilient local knowledge base fallback.
  */
 
 export const QUICK_SUGGESTIONS = [
@@ -12,145 +13,117 @@ export const QUICK_SUGGESTIONS = [
   "Tell me a fun fact about Sign Language"
 ];
 
-const SYSTEM_PROMPT = `You are SignBot, an expert, friendly, and ultra-intelligent AI Assistant embedded in the SignVerse 3D Sign Language Learning and Translation platform.
+const ALLOWED_ROUTE_REGEX = /^\/[a-zA-Z0-9\-_/?=&%]*$/;
+const MAX_QUERY_LENGTH = 2000;
 
-You can answer ANY question in real-time across all subjects:
-- General Knowledge, Science, Technology, Coding, Mathematics, History, Famous People, and Daily Conversations.
-- Conversational chat (Greetings, how are you, identity, jokes, motivation).
-- Sign Language & Deaf Culture (ASL, ISL, BSL, gestures, fingerspelling, grammar, facial expressions).
-- SignVerse Platform Details (3D Avatars: Luna, Marc, Anna, Francoise, Siggi; SiGML XML notation based on HamNoSys; JASign/CWASA WebGL engine; AI Text & Voice to Sign Translate; Flashcard Practice; Timed Quizzes; Daily Streak and ranking badges).
-
-Formatting Rules:
-- Keep answers concise, clear, and well-structured with Markdown bullet points and bolding.
-- If the user asks about a feature in SignVerse (e.g. translation, alphabets, quiz, flashcards, dashboard), mention the feature and add an action route at the end in the format: [[ACTION:Label|Route]] (e.g. [[ACTION:Go to Translator|/translate]], [[ACTION:Start a Quiz|/quiz]], [[ACTION:Learn Alphabets|/alphabets]], [[ACTION:View Dashboard|/dashboard]]).
-- Be polite, supportive, and accessibility-conscious.`;
-
-/**
- * Ask AI (Supports Groq Real-Time & Google Gemini)
- */
-export async function askGeminiRealtime(userQuery, conversationHistory = [], customApiKey = null) {
-  const apiKey = (customApiKey || localStorage.getItem('groq_api_key') || localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GROQ_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-
-  if (!apiKey) {
-    return getLocalBotResponse(userQuery);
-  }
-
-  // 1. If key is a Groq API Key (starts with "gsk_")
-  if (apiKey.startsWith('gsk_')) {
-    return askGroqRealtime(userQuery, conversationHistory, apiKey);
-  }
-
-  // 2. Otherwise use Google Gemini API
-  try {
-    const formattedHistory = conversationHistory.slice(-8).map((msg) => ({
-      role: msg.sender === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.text }]
-    }));
-
-    const contents = [
-      ...formattedHistory,
-      {
-        role: 'user',
-        parts: [{ text: userQuery }]
-      }
-    ];
-
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: contents,
-        generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
-      })
-    });
-
-    if (!response.ok) {
-      console.warn('Gemini API error, trying local fallback.');
-      return getLocalBotResponse(userQuery);
-    }
-
-    const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response. Please try again!";
-    return parseActionFromResponse(rawText, 'Gemini 1.5 Flash ⚡');
-
-  } catch (error) {
-    console.error('API error, falling back to local engine:', error);
-    return getLocalBotResponse(userQuery);
-  }
+export function isSafeInternalRoute(route) {
+  if (typeof route !== 'string') return false;
+  const trimmed = route.trim();
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return false;
+  return ALLOWED_ROUTE_REGEX.test(trimmed);
 }
 
-/**
- * Groq Cloud Real-Time API (Ultra-fast LLM inference)
- */
-async function askGroqRealtime(userQuery, conversationHistory, apiKey) {
-  const modelsToTry = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
-
-  for (const model of modelsToTry) {
-    try {
-      const messages = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...conversationHistory.slice(-6).map((msg) => ({
-          role: msg.sender === 'user' ? 'user' : 'assistant',
-          content: msg.text
-        })),
-        { role: 'user', content: userQuery }
-      ];
-
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: messages,
-          temperature: 0.7,
-          max_tokens: 800
-        })
-      });
-
-      if (!response.ok) {
-        console.warn(`Groq model ${model} failed with ${response.status}, trying next...`);
-        continue;
-      }
-
-      const data = await response.json();
-      let rawText = data?.choices?.[0]?.message?.content || "";
-
-      // Strip <think>...</think> if reasoning model outputted internal monologue
-      rawText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-      if (rawText) {
-        return parseActionFromResponse(rawText, 'Groq AI ⚡');
-      }
-    } catch (err) {
-      console.error(`Error querying Groq model ${model}:`, err);
-    }
-  }
-
-  // If all Groq models failed, fallback to local
-  return getLocalBotResponse(userQuery);
-}
-
-function parseActionFromResponse(rawText, providerTag) {
-  let cleanedText = rawText;
+export function parseActionFromResponse(rawText, providerTag) {
+  let cleanedText = String(rawText || '');
   let action = null;
-  const actionMatch = rawText.match(/\[\[ACTION:(.*?)\|(.*?)\]\]/);
+  const actionMatch = cleanedText.match(/\[\[ACTION:(.*?)\|(.*?)\]\]/);
   if (actionMatch) {
-    action = { label: actionMatch[1].trim(), route: actionMatch[2].trim() };
-    cleanedText = rawText.replace(/\[\[ACTION:.*?\|.*?\]\]/, '').trim();
+    const label = actionMatch[1].trim().slice(0, 80);
+    const route = actionMatch[2].trim();
+    if (label && isSafeInternalRoute(route)) {
+      action = { label, route };
+    }
+    cleanedText = cleanedText.replace(/\[\[ACTION:.*?\|.*?\]\]/, '').trim();
   }
 
   return {
     text: cleanedText,
-    action: action,
+    action,
     isRealtimeAI: true,
     provider: providerTag
   };
+}
+
+/**
+ * Ask AI via secure /api/chat serverless proxy with graceful local fallback.
+ * Never embeds or reads VITE_ API keys in frontend code.
+ */
+export async function askGeminiRealtime(userQuery, conversationHistory = [], customApiKey = null) {
+  const cleanQuery = typeof userQuery === 'string' ? userQuery.trim().slice(0, MAX_QUERY_LENGTH) : '';
+  if (!cleanQuery) {
+    return {
+      text: "Please enter a question so I can help you!",
+      action: null,
+      isRealtimeAI: false
+    };
+  }
+
+  const normalizedHistory = Array.isArray(conversationHistory)
+    ? conversationHistory
+        .slice(-8)
+        .map((msg) => {
+          const text =
+            typeof msg?.text === 'string'
+              ? msg.text
+              : typeof msg?.parts?.[0]?.text === 'string'
+                ? msg.parts[0].text
+                : '';
+          const role = msg?.sender === 'user' || msg?.role === 'user' ? 'user' : 'model';
+          return text.trim() ? { role, text: text.trim().slice(0, MAX_QUERY_LENGTH) } : null;
+        })
+        .filter(Boolean)
+    : [];
+
+  const sessionCustomKey =
+    typeof window !== 'undefined' && window.sessionStorage
+      ? window.sessionStorage.getItem('signverse_session_ai_key') || ''
+      : '';
+  const overrideKey = (customApiKey || sessionCustomKey || '').trim();
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (overrideKey) {
+      headers['X-Custom-API-Key'] = overrideKey;
+    }
+
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 12000) : null;
+
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        query: cleanQuery,
+        history: normalizedHistory
+      }),
+      ...(controller ? { signal: controller.signal } : {})
+    });
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return getLocalBotResponse(cleanQuery);
+    }
+
+    const data = await response.json();
+    if (!data || data.fallback || !data.text) {
+      return getLocalBotResponse(cleanQuery);
+    }
+
+    const safeAction =
+      data.action && isSafeInternalRoute(data.action.route)
+        ? { label: String(data.action.label || 'Open').slice(0, 80), route: data.action.route }
+        : null;
+
+    return {
+      text: String(data.text),
+      action: safeAction,
+      isRealtimeAI: Boolean(data.isRealtimeAI),
+      provider: data.provider || 'SignBot AI'
+    };
+  } catch {
+    return getLocalBotResponse(cleanQuery);
+  }
 }
 
 /**
@@ -213,8 +186,8 @@ const LOCAL_KNOWLEDGE_BASE = [
     keywords: ["pricing", "price", "subscription", "free trial", "credits", "plans", "cost"],
     response: `**SignVerse Pricing & Plans:** 💎
 - 🎁 **3-Day Free Trial**: 50 Free AI Credits + Full Core Access.
-- 🚀 **Pro Monthly ($5/mo)**: Unlimited 3D translations, 500 AI credits & all 5 avatars.
-- 💰 **Pro Annual ($60/yr)**: Save 20%, unlimited everything & certificate.`,
+- 🚀 **Pro Monthly (₹199/mo)**: Unlimited 3D translations, 500 AI credits & all 5 avatars.
+- 💰 **Pro Annual (₹1,499/yr)**: Save 38%, unlimited everything & certificate.`,
     action: { label: "View Pricing Plans", route: "/pricing" }
   },
   {
@@ -228,12 +201,11 @@ const LOCAL_KNOWLEDGE_BASE = [
 ];
 
 export function getLocalBotResponse(userQuery) {
-  const query = userQuery.toLowerCase().trim();
+  const query = String(userQuery || '').toLowerCase().trim();
 
-  // Only trigger local knowledge if query strongly matches phrase
   for (const entry of LOCAL_KNOWLEDGE_BASE) {
     for (const kw of entry.keywords) {
-      if (query === kw || (query.length > 5 && query.startsWith(kw))) {
+      if (query === kw || query.includes(kw)) {
         return {
           text: entry.response,
           action: entry.action || null,

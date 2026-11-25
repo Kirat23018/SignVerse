@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { playSiGMLFast } from '../utils/sigmlService';
 
 export default function Dictionary() {
   const [searchTerm, setSearchTerm] = useState('');
+  const iframeRef = useRef(null);
 
   // Safe Master List (Directly from your 'public/master dictionary' folder)
   const fileList = [
@@ -117,12 +119,16 @@ export default function Dictionary() {
             Dictionary Index
           </span>
           
-          <input 
-            type="text" 
+          <label htmlFor="dictionary-search" className="sr-only">
+            Search sign files
+          </label>
+          <input
+            id="dictionary-search"
+            type="search"
             placeholder="Search sign files..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ccc', fontSize: '14px', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ccc', fontSize: '14px', boxSizing: 'border-box', backgroundColor: 'white', color: '#0f172a' }}
           />
         </div>
 
@@ -131,10 +137,19 @@ export default function Dictionary() {
             filteredSigns.map((item, index) => {
               const isSelected = activeSign && activeSign.file === item.file;
               return (
-                <div 
-                  key={index} 
-                  onClick={() => setActiveSign(item)}
+                <button
+                  type="button"
+                  key={index}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    setActiveSign(item);
+                    if (iframeRef.current) {
+                      playSiGMLFast(iframeRef.current, item.file);
+                    }
+                  }}
                   style={{ 
+                    width: '100%',
+                    textAlign: 'left',
                     padding: '12px 15px', 
                     borderRadius: '8px', 
                     cursor: 'pointer', 
@@ -147,16 +162,16 @@ export default function Dictionary() {
                   }}
                 >
                   <div>
-                    <h4 style={{ margin: '0 0 3px 0', color: isSelected ? '#0d47a1' : '#333', fontSize: '15px' }}>{item.label}</h4>
-                    <span style={{ fontSize: '11px', color: '#888' }}>master dictionary</span>
+                    <div style={{ margin: '0 0 3px 0', color: isSelected ? '#0d47a1' : '#1e293b', fontSize: '15px', fontWeight: '700' }}>{item.label}</div>
+                    <span style={{ fontSize: '11px', color: '#475569' }}>master dictionary</span>
                   </div>
-                  <span style={{ fontSize: '15px' }}>▶️</span>
-                </div>
+                  <span aria-hidden="true" style={{ fontSize: '15px' }}>▶️</span>
+                </button>
               );
             })
           ) : (
-            <div style={{ textAlign: 'center', padding: '30px', color: '#777', fontSize: '14px' }}>
-              No files found! 🔍
+            <div role="status" style={{ textAlign: 'center', padding: '30px', color: '#475569', fontSize: '14px' }}>
+              No files found!
             </div>
           )}
         </div>
@@ -183,10 +198,15 @@ export default function Dictionary() {
           {/* ASLI LUNA IFRAME (Robot Box Hata Diya) */}
           {/* Iframe key lagaya hai taaki word change hone par iframe re-render ho */}
           <div style={{ width: '100%', height: '550px', backgroundColor: '#eef2f5', borderRadius: '14px', boxShadow: '0 6px 20px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #ccc' }}>
-            <iframe 
-              key={activeSign ? activeSign.file : 'default'} 
+            <iframe
+              ref={iframeRef}
               src="/player-applet.html" 
               title="Luna 3D Avatar Sign Player"
+              onLoad={() => {
+                if (activeSign && iframeRef.current) {
+                  setTimeout(() => playSiGMLFast(iframeRef.current, activeSign.file), 500);
+                }
+              }}
               style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
             />
           </div>

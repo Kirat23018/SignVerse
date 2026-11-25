@@ -311,8 +311,15 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
               {/* Circular Interactive Node */}
               <div
                 onClick={() => handleLevelClick(level)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleLevelClick(level);
+                  }
+                }}
                 role="button"
                 tabIndex={0}
+                aria-label={`${level.title}${isLevelLocked ? ' (Locked, Pro required)' : ''}`}
                 style={{
                   width: '92px',
                   height: '92px',
@@ -448,6 +455,9 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
       {/* SLEEK GLASSMORPHISM MOCK PAYMENT MODAL */}
       {isPaymentModalOpen && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="roadmap-unlock-title"
           style={{
             position: 'fixed',
             inset: 0,
@@ -487,6 +497,8 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
               }}
             >
               <button
+                type="button"
+                aria-label="Close premium unlock modal"
                 onClick={() => setIsPaymentModalOpen(false)}
                 style={{
                   position: 'absolute',
@@ -507,7 +519,7 @@ export default function CourseRoadmap({ onSelectLevel, onLevelSelect }) {
               </button>
 
               <div style={{ fontSize: '48px', marginBottom: '8px' }}>💎</div>
-              <h2 style={{ fontSize: '22px', fontWeight: '900', margin: '0 0 6px', letterSpacing: '-0.3px' }}>
+              <h2 id="roadmap-unlock-title" style={{ fontSize: '22px', fontWeight: '900', margin: '0 0 6px', letterSpacing: '-0.3px' }}>
                 Unlock Premium Course Access
               </h2>
               <p style={{ fontSize: '13.5px', color: '#bfdbfe', margin: 0 }}>

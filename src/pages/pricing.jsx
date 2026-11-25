@@ -56,9 +56,9 @@ export default function Pricing() {
           </div>
 
           {successMessage && (
-            <div style={{
+            <div role="status" aria-live="polite" style={{
               marginTop: '16px', padding: '12px 20px', backgroundColor: 'rgba(124, 169, 146, 0.15)',
-              color: '#7CA992', borderRadius: '12px', fontSize: '14px', fontWeight: '700',
+              color: '#A3C7B5', borderRadius: '12px', fontSize: '14px', fontWeight: '700',
               border: '1px solid #7CA992'
             }}>
               {successMessage}

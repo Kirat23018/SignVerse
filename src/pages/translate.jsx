@@ -26,9 +26,10 @@ export default function Translate() {
   const recognitionRef = useRef(null);
   const finalTranscriptRef = useRef('');
 
-  // Listen for real-time CWASA gloss and frame broadcasts
+  // Listen for real-time CWASA gloss and frame broadcasts (same-origin verified)
   useEffect(() => {
     const handleMsg = (e) => {
+      if (e.origin && e.origin !== window.location.origin) return;
       if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
         if (e.data.gloss) setLiveCWASAGloss(e.data.gloss);
         if (e.data.signFrame) setLiveCWASASF(e.data.signFrame);
@@ -217,7 +218,8 @@ export default function Translate() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.");
+      setVoiceSupported(false);
+      setCurrentAction('Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
       return;
     }
 
@@ -336,39 +338,39 @@ export default function Translate() {
         {/* Header with Credits & Plan Badge */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <h2 style={{ color: '#0f172a', margin: 0, fontSize: '22px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>AI Text & Voice to Sign</span>
+            <h1 style={{ color: '#0f172a', margin: 0, fontSize: '22px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>AI Text &amp; Voice to Sign</span>
               <span style={{ fontSize: '11.5px', backgroundColor: '#e0f2fe', color: '#004080', padding: '3px 8px', borderRadius: '12px', fontWeight: '700' }}>
-                Voice 🎙️
+                Voice <span aria-hidden="true">🎙️</span>
               </span>
-            </h2>
+            </h1>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <Link to="/text-to-sign" style={{ textDecoration: 'none' }}>
               <span style={{ fontSize: '12px', background: 'rgba(255, 255, 255, 0.08)', color: '#0f172a', padding: '5px 12px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
-                🗣️ Hub
+                <span aria-hidden="true">🗣️ </span>Hub
               </span>
             </Link>
             <Link to="/sign-to-text" style={{ textDecoration: 'none' }}>
-              <span style={{ fontSize: '12px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#ffffff', padding: '5px 12px', borderRadius: '14px', fontWeight: '700', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)' }}>
-                📷 Sign-to-Text Mode
+              <span style={{ fontSize: '12px', background: 'linear-gradient(135deg, #047857, #065f46)', color: '#ffffff', padding: '5px 12px', borderRadius: '14px', fontWeight: '700', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)' }}>
+                <span aria-hidden="true">📷 </span>Sign-to-Text Mode
               </span>
             </Link>
             <Link to="/pricing" style={{ textDecoration: 'none' }}>
-              <span style={{ fontSize: '12px', backgroundColor: '#f1f5f9', color: '#334155', padding: '4px 10px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
+              <span style={{ fontSize: '12px', backgroundColor: '#f1f5f9', color: '#1e293b', padding: '4px 10px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
                 {subStatus.isPaidPlan ? '✨ Pro (Unlimited)' : `🪙 ${subStatus.credits} Credits • ${subStatus.trialDaysRemaining}d Trial`}
               </span>
             </Link>
           </div>
         </div>
         
-        <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '14px', lineHeight: '1.4' }}>
-          Speak or type sentences. High-speed $O(1)$ offline matcher animates 3D avatars instantly!
+        <p style={{ color: '#475569', fontSize: '13px', marginBottom: '14px', lineHeight: '1.4' }}>
+          Speak or type sentences. High-speed instant offline matcher animates 3D avatars immediately!
         </p>
 
         {creditAlert && (
-          <div style={{ padding: '10px 14px', backgroundColor: '#fee2e2', color: '#dc2626', borderRadius: '10px', marginBottom: '14px', fontSize: '13px', fontWeight: '700', border: '1px solid #fca5a5' }}>
+          <div role="alert" style={{ padding: '10px 14px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '10px', marginBottom: '14px', fontSize: '13px', fontWeight: '700', border: '1px solid #fca5a5' }}>
             ⚠️ {creditAlert} <Link to="/pricing" style={{ color: '#004080', textDecoration: 'underline', marginLeft: '6px' }}>Upgrade to Pro</Link>
           </div>
         )}
@@ -426,7 +428,11 @@ export default function Translate() {
         
         {/* Text Area with Clear Button */}
         <div style={{ position: 'relative', marginBottom: '14px' }}>
-          <textarea 
+          <label htmlFor="translate-text-input" className="sr-only">
+            Enter text to translate into 3D sign language
+          </label>
+          <textarea
+            id="translate-text-input"
             placeholder={isListening ? "Listening to your voice... speak now!" : "Enter text here or speak using the mic above (e.g., Hello father it is crucial)..."}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -434,7 +440,7 @@ export default function Translate() {
             style={{ 
               width: '100%', height: '110px', padding: '12px 36px 12px 12px', borderRadius: '10px', 
               border: isListening ? '2px solid #ff9800' : '1.5px solid #cbd5e1', boxSizing: 'border-box', 
-              fontSize: '14.5px', resize: 'none', outline: 'none', fontFamily: 'inherit',
+              fontSize: '14.5px', resize: 'none', fontFamily: 'inherit',
               color: '#0f172a', backgroundColor: '#ffffff',
               transition: 'border-color 0.2s, box-shadow 0.2s'
             }}
@@ -443,15 +449,17 @@ export default function Translate() {
           />
 
           {inputText && (
-            <button 
+            <button
+              type="button"
               onClick={() => setInputText('')}
+              aria-label="Clear input text"
               title="Clear text"
               style={{
                 position: 'absolute', right: '12px', top: '12px', background: 'transparent',
-                border: 'none', color: '#94a3b8', fontSize: '16px', cursor: 'pointer', padding: '4px'
+                border: 'none', color: '#475569', fontSize: '16px', cursor: 'pointer', padding: '4px'
               }}
             >
-              ✕
+              <span aria-hidden="true">✕</span>
             </button>
           )}
         </div>
@@ -493,6 +501,7 @@ export default function Translate() {
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => setSpeedMultiplier(option.value)}
                   disabled={isPlaying}
                   style={{
@@ -544,14 +553,17 @@ export default function Translate() {
         </button>
 
         {/* Live Status Indicator Card */}
-        <div style={{ 
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
           marginTop: '16px', padding: '12px 16px', backgroundColor: isPlaying ? '#dcfce7' : isListening ? '#fef3c7' : '#f8fafc', 
           borderRadius: '10px', border: isPlaying ? '1px solid #86efac' : isListening ? '1px solid #fcd34d' : '1px solid #e2e8f0',
           textAlign: 'center', transition: 'all 0.3s ease'
         }}>
-          <h4 style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '700' }}>
+          <h2 style={{ margin: '0 0 4px 0', color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '700' }}>
             System Status
-          </h4>
+          </h2>
           <p style={{ 
             fontSize: '14px', fontWeight: '800', color: isPlaying ? '#15803d' : isListening ? '#b45309' : '#004080', margin: 0,
             animation: isPlaying || isListening ? 'pulse 1.5s infinite' : 'none' 

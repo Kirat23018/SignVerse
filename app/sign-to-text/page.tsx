@@ -168,7 +168,7 @@ export default function SignToTextClientPage() {
             script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js";
             script.crossOrigin = "anonymous";
             script.onload = () => resolve();
-            script.onerror = (e) => reject(new Error("Failed to load @mediapipe/hands from CDN"));
+            script.onerror = () => reject(new Error("Failed to load @mediapipe/hands from CDN"));
             document.head.appendChild(script);
           });
         }
@@ -236,7 +236,7 @@ export default function SignToTextClientPage() {
       isCancelled = true;
       if (animationFrameIdRef.current) cancelAnimationFrame(animationFrameIdRef.current);
       if (handsInstanceRef.current) {
-        try { handsInstanceRef.current.close(); } catch (e) {}
+        try { handsInstanceRef.current.close(); } catch { /* ignore unmount cleanup */ }
       }
     };
   }, [classifyGesture, drawSkeleton]);
@@ -254,7 +254,7 @@ export default function SignToTextClientPage() {
         try {
           isProcessingRef.current = true;
           await hands.send({ image: video });
-        } catch (err) {
+        } catch {
           isProcessingRef.current = false;
         }
       }

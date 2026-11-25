@@ -16,6 +16,8 @@ export default function Dashboard() {
   const [userAvatarPhoto, setUserAvatarPhoto] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState('weekly'); // 'weekly' | 'alltime'
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [uploadError, setUploadError] = useState('');
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -174,17 +176,34 @@ export default function Dashboard() {
     { rank: 12, name: 'You (Alex)', xp: stats.totalXP, tier: rankData.rank, flag: '🌐', streak: stats.streak, avatar: '👤', isUser: true }
   ];
 
-  // Avatar Photo Handlers
+  // Avatar Photo Handlers (strict type & size validation to prevent XSS/SVG uploads & quota crashes)
+  const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+  const MAX_AVATAR_BYTES = 1.5 * 1024 * 1024;
+
   const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUserAvatarPhoto(reader.result);
-        localStorage.setItem('userAvatarPhoto', reader.result);
-      };
-      reader.readAsDataURL(file);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setUploadError('Please upload a PNG, JPEG, or WebP image.');
+      return;
     }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setUploadError('Profile image must be 1.5 MB or smaller.');
+      return;
+    }
+    setUploadError('');
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string' && reader.result.startsWith('data:image/')) {
+        setUserAvatarPhoto(reader.result);
+        try {
+          localStorage.setItem('userAvatarPhoto', reader.result);
+        } catch {
+          setUploadError('Image is too large for browser storage.');
+        }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const startCamera = async () => {
@@ -251,7 +270,9 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
             {/* Avatar */}
             <div style={{ position: 'relative' }}>
-              <div
+              <button
+                type="button"
+                aria-label="Upload profile photo"
                 style={{
                   width: '84px',
                   height: '84px',
@@ -264,21 +285,23 @@ export default function Dashboard() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '34px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  padding: 0
                 }}
                 onClick={() => fileInputRef.current && fileInputRef.current.click()}
                 title="Click to upload profile photo"
               >
                 {userAvatarPhoto ? (
-                  <img src={userAvatarPhoto} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={userAvatarPhoto} alt="User profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <span>👤</span>
+                  <span aria-hidden="true">👤</span>
                 )}
-              </div>
+              </button>
 
               {/* Snapshot Camera Trigger */}
               <button
                 type="button"
+                aria-label="Take profile photo with camera"
                 onClick={(e) => { e.stopPropagation(); startCamera(); }}
                 title="Take photo with camera"
                 style={{
@@ -299,11 +322,12 @@ export default function Dashboard() {
                   zIndex: 2
                 }}
               >
-                📷
+                <span aria-hidden="true">📷</span>
               </button>
 
               {/* Status Indicator */}
               <div
+                aria-hidden="true"
                 style={{
                   position: 'absolute',
                   bottom: '-2px',
@@ -315,7 +339,19 @@ export default function Dashboard() {
                   border: '2px solid #191C1A'
                 }}
               />
-              <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" style={{ display: 'none' }} />
+              <input
+                type="file"
+                aria-label="Choose profile photo file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept="image/png,image/jpeg,image/webp"
+                style={{ display: 'none' }}
+              />
+              {uploadError && (
+                <div role="alert" style={{ marginTop: '6px', fontSize: '11.5px', color: '#fecaca', maxWidth: '180px' }}>
+                  {uploadError}
+                </div>
+              )}
             </div>
 
             <div>
@@ -405,6 +441,9 @@ export default function Dashboard() {
         {/* Camera Modal if taking picture */}
         {isCameraOpen && (
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="snap-photo-title"
             style={{
               position: 'fixed',
               inset: 0,
@@ -429,19 +468,21 @@ export default function Dashboard() {
                 boxShadow: '0 12px 40px rgba(0, 0, 0, 0.35)'
               }}
             >
-              <h3 style={{ margin: '0 0 16px', color: '#E4EAE6' }}>Snap Profile Photo</h3>
-              <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.08)' }} />
+              <h2 id="snap-photo-title" style={{ margin: '0 0 16px', color: '#E4EAE6', fontSize: '18px' }}>Snap Profile Photo</h2>
+              <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.08)' }} />
               <canvas ref={canvasRef} width="200" height="200" style={{ display: 'none' }} />
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
+                  type="button"
                   onClick={capturePhoto}
                   style={{ flex: 1, padding: '10px', background: '#7CA992', color: '#191C1A', border: 'none', borderRadius: '10px', fontWeight: '800', cursor: 'pointer' }}
                 >
                   Capture
                 </button>
                 <button
+                  type="button"
                   onClick={stopCamera}
-                  style={{ padding: '10px 18px', background: 'rgba(255, 255, 255, 0.06)', color: '#E4EAE6', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+                  style={{ padding: '10px 18px', background: 'rgba(255, 255, 255, 0.08)', color: '#E4EAE6', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
@@ -904,14 +945,17 @@ export default function Dashboard() {
                 </div>
 
                 {/* Filter Tabs */}
-                <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '3px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <div role="tablist" aria-label="Leaderboard timeframe" style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '3px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
                   <button
+                    type="button"
+                    role="tab"
+                    aria-selected={leaderboardTab === 'weekly'}
                     onClick={() => setLeaderboardTab('weekly')}
                     style={{
                       padding: '5px 12px',
                       borderRadius: '8px',
                       background: leaderboardTab === 'weekly' ? '#7CA992' : 'transparent',
-                      color: leaderboardTab === 'weekly' ? '#191C1A' : '#9CAEA4',
+                      color: leaderboardTab === 'weekly' ? '#191C1A' : '#B5C5BC',
                       fontWeight: '800',
                       border: 'none',
                       fontSize: '11.5px',
@@ -922,12 +966,15 @@ export default function Dashboard() {
                     Weekly Cup
                   </button>
                   <button
+                    type="button"
+                    role="tab"
+                    aria-selected={leaderboardTab === 'alltime'}
                     onClick={() => setLeaderboardTab('alltime')}
                     style={{
                       padding: '5px 12px',
                       borderRadius: '8px',
                       background: leaderboardTab === 'alltime' ? '#7CA992' : 'transparent',
-                      color: leaderboardTab === 'alltime' ? '#191C1A' : '#9CAEA4',
+                      color: leaderboardTab === 'alltime' ? '#191C1A' : '#B5C5BC',
                       fontWeight: '800',
                       border: 'none',
                       fontSize: '11.5px',
@@ -1141,7 +1188,7 @@ export default function Dashboard() {
                     <circle
                       cx={pt.cx}
                       cy={pt.cy}
-                      r="5"
+                      r={hoveredPoint?.cx === pt.cx ? '7' : '5'}
                       fill="#191C1A"
                       stroke="#7CA992"
                       strokeWidth="2.5"

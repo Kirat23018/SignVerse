@@ -61,12 +61,13 @@ export default function Practice() {
     }
   }, []);
 
-  // Listen to CWASA updates from iframe
+  // Listen to CWASA updates from iframe (same-origin verified)
   useEffect(() => {
     const handleMessage = (e) => {
+      if (e.origin && e.origin !== window.location.origin) return;
       if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
         if (e.data.gloss) setLiveGloss(e.data.gloss);
-        if (e.data.frame) setLiveFrame(e.data.frame);
+        if (e.data.signFrame || e.data.frame) setLiveFrame(e.data.signFrame || e.data.frame);
       }
     };
     window.addEventListener('message', handleMessage);
@@ -233,12 +234,14 @@ export default function Practice() {
               <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '8px' }}>
                 CHOOSE PRACTICE VOCABULARY:
               </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              <div role="group" aria-label="Choose practice vocabulary" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {Object.keys(categoryMap).slice(0, 8).map(cat => {
                   const isSel = selectedCategory === cat;
                   return (
                     <button
+                      type="button"
                       key={cat}
+                      aria-pressed={isSel}
                       onClick={() => setSelectedCategory(cat)}
                       style={{
                         padding: '6px 12px',

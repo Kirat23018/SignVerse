@@ -130,10 +130,10 @@ export default function CoursesPage() {
           </div>
 
           <LessonEngine
-            level={activeLevel}
+            levelData={activeLevel}
             currentLessonIndex={currentLessonIndex}
             onNextLesson={handleNextLesson}
-            onBackToRoadmap={handleBackToCatalog}
+            onBack={handleBackToCatalog}
           />
         </div>
       </div>

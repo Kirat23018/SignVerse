@@ -119,7 +119,7 @@ export default function Courses() {
               <div>
                 <div style={{ fontSize: '11px', color: '#9CAEA4', textTransform: 'uppercase', fontWeight: '800' }}>Membership Tier</div>
                 <div style={{ fontSize: '15px', fontWeight: '900', color: isPro ? '#7CA992' : '#d4a373' }}>
-                  {isPro ? (subStatus?.planName || '👑 Pro All-Access') : '🌱 Freemium (L1-5 Free)'}
+                  {isPro ? (subStatus?.plan || '👑 Pro All-Access') : '🌱 Freemium (L1-5 Free)'}
                 </div>
               </div>
 
