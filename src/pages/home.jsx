@@ -305,12 +305,12 @@ export default function Home() {
                 </h2>
 
                 <p style={{ fontSize: '15px', color: '#9CAEA4', lineHeight: '1.65', margin: '0 0 28px 0' }}>
-                  Perform sign gestures comfortably in front of your camera. In-browser MediaPipe vision tracks 21 hand joints in real time to instantly translate gestures with our deep learning model.
+                  Perform sign gestures comfortably in front of your camera. In-browser MediaPipe vision tracks 21 hand joints in real time to recognize static signs and guided sentence sequences.
                 </p>
 
                 {/* Feature Tags */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '32px' }}>
-                  {['Dual Layout Studio', 'TF.js Deep Learning', '21 Hand Landmarks', '100% In-Browser', 'Privacy Safe'].map((tag, i) => (
+                  {['Dual Layout Studio', '21-Landmark Engine', 'Sentence Sequencer', '100% In-Browser', 'Privacy Safe'].map((tag, i) => (
                     <span
                       key={i}
                       style={{

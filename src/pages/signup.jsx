@@ -147,6 +147,9 @@ export default function Signup({ setIsAuthenticated }) {
         <div style={{ marginTop: '25px', fontSize: '14px', color: '#B5C5BC' }}>
           Already have an account? <Link to="/login" style={{ color: '#A3C7B5', fontWeight: '700', textDecoration: 'none' }}>Log In</Link>
         </div>
+        <p style={{ marginTop: '12px', fontSize: '11.5px', color: '#85968C' }}>
+          Local demo registration — no credentials are transmitted to a remote auth server.
+        </p>
       </div>
     </div>
   );

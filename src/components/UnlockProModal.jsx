@@ -106,6 +106,9 @@ export default function UnlockProModal({ isOpen, onClose, onUnlocked, targetModu
           color: '#E4EAE6'
         }}
       >
+        <span style={{ backgroundColor: 'rgba(124, 169, 146, 0.14)', border: '1px solid rgba(124, 169, 146, 0.28)', color: '#A3CBB7', padding: '4px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '800', display: 'inline-block', marginTop: '18px' }}>
+          Demo Sandbox Upgrade (No Real Charge)
+        </span>
         {/* Close Button */}
         <button
           type="button"

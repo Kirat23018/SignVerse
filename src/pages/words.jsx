@@ -26,15 +26,13 @@ export default function Words() {
 
   const { allWords } = useMemo(() => getAllVocabulary(), []);
 
-  // Set default initial word
   useEffect(() => {
     if (!selectedWord && allWords.length > 0) {
-      const defaultWord = allWords.find(w => w.label.toLowerCase() === 'hello') || allWords[0];
+      const defaultWord = allWords.find((w) => w.label.toLowerCase() === 'hello') || allWords[0];
       setSelectedWord(defaultWord);
     }
   }, [allWords, selectedWord]);
 
-  // Listen for real-time CWASA gloss and frame broadcasts from iframe (same-origin verified)
   useEffect(() => {
     const handleMsg = (e) => {
       if (e.origin && e.origin !== window.location.origin) return;
@@ -47,12 +45,11 @@ export default function Words() {
     return () => window.removeEventListener('message', handleMsg);
   }, []);
 
-  // Filter words by category and search query
   const displayedWords = useMemo(() => {
     let list = allWords;
 
     if (selectedCategory !== 'all') {
-      list = list.filter(w => {
+      list = list.filter((w) => {
         const cat = (w.category || '').toLowerCase();
         if (selectedCategory === 'basics') return cat.includes('basic') || cat.includes('general') || cat.includes('phrase');
         if (selectedCategory === 'family') return cat.includes('family');
@@ -67,7 +64,7 @@ export default function Words() {
 
     if (searchTerm.trim() !== '') {
       const q = searchTerm.toLowerCase().trim();
-      list = list.filter(item => (item.label || '').toLowerCase().includes(q));
+      list = list.filter((item) => (item.label || '').toLowerCase().includes(q));
     }
 
     return list;
@@ -77,12 +74,8 @@ export default function Words() {
     setVisibleCount(PAGE_SIZE);
   }, [selectedCategory, searchTerm]);
 
-  const visibleWords = useMemo(
-    () => displayedWords.slice(0, visibleCount),
-    [displayedWords, visibleCount]
-  );
+  const visibleWords = useMemo(() => displayedWords.slice(0, visibleCount), [displayedWords, visibleCount]);
 
-  // Ultra-Fast Word Trigger (< 1ms)
   const handleWordAction = useCallback((item) => {
     if (!item) return;
     setSelectedWord(item);
@@ -98,7 +91,6 @@ export default function Words() {
     }, 1400);
   }, []);
 
-  // Keyboard navigation
   const handleKeyDown = (e, item) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -121,48 +113,48 @@ export default function Words() {
   };
 
   return (
-    <div 
+    <div
       className="signverse-split-container"
       style={{
         display: 'flex',
         flex: 1,
         width: '100%',
-        height: 'calc(100vh - 56px)',
+        height: 'calc(100vh - 64px)',
         overflow: 'hidden',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        backgroundColor: '#f8fafc',
+        fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        backgroundColor: '#191C1A',
+        color: '#E4EAE6',
         position: 'relative'
       }}
     >
       {/* Left Panel: Search, Category Pills & Word List */}
-      <div 
+      <div
         className="signverse-panel-left"
         style={{
           width: '45%',
           height: '100%',
           padding: '24px 26px',
-          backgroundColor: '#ffffff',
+          backgroundColor: '#1F2421',
           overflowY: 'auto',
           overflowX: 'hidden',
-          borderRight: '2px solid #e2e8f0',
+          borderRight: '1px solid #2D3531',
           display: 'flex',
           flexDirection: 'column',
           boxSizing: 'border-box'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-          <h1 style={{ color: '#003366', margin: 0, fontSize: '24px', fontWeight: '800' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+          <h1 style={{ color: '#E4EAE6', margin: 0, fontSize: '23px', fontWeight: '800' }}>
             Sign Dictionary &amp; Words
           </h1>
-          <span style={{ fontSize: '12px', fontWeight: '700', backgroundColor: '#dcfce7', color: '#14532d', padding: '3px 9px', borderRadius: '12px' }}>
+          <span style={{ fontSize: '12px', fontWeight: '700', backgroundColor: 'rgba(124,169,146,0.16)', color: '#A3CBB7', border: '1px solid rgba(124,169,146,0.3)', padding: '3px 10px', borderRadius: '10px' }}>
             {allWords.length}+ Words Ready
           </span>
         </div>
-        <p style={{ color: '#475569', fontSize: '13.5px', marginBottom: '14px', lineHeight: '1.4' }}>
-          Select any word to instantly animate on the 3D avatar with live gloss and frame details.
+        <p style={{ color: '#B5C5BC', fontSize: '13.5px', marginBottom: '14px', lineHeight: '1.45' }}>
+          Select any word to animate on the 3D avatar with live gloss and frame details.
         </p>
-        
-        {/* Fast Search Input */}
+
         <div style={{ position: 'relative', marginBottom: '14px' }}>
           <label htmlFor="words-search-input" className="sr-only">
             Search sign dictionary words
@@ -170,22 +162,19 @@ export default function Words() {
           <input
             id="words-search-input"
             type="search"
-            placeholder="🔍 Search all words (e.g. Hello, Family, Apple, Friend)..."
+            placeholder="Search all words (e.g. Hello, Family, Apple, Friend)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
               width: '100%',
               padding: '12px 38px 12px 14px',
               borderRadius: '10px',
-              border: '1.5px solid #cbd5e1',
+              border: '1px solid #3A443F',
               boxSizing: 'border-box',
-              fontSize: '14.5px',
-              transition: 'border-color 0.2s',
-              backgroundColor: '#f8fafc',
-              color: '#0f172a'
+              fontSize: '14px',
+              backgroundColor: '#191C1A',
+              color: '#E4EAE6'
             }}
-            onFocus={(e) => e.target.style.borderColor = '#003366'}
-            onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
           />
           {searchTerm && (
             <button
@@ -199,7 +188,7 @@ export default function Words() {
                 transform: 'translateY(-50%)',
                 background: 'none',
                 border: 'none',
-                color: '#475569',
+                color: '#B5C5BC',
                 cursor: 'pointer',
                 fontWeight: 'bold'
               }}
@@ -209,18 +198,11 @@ export default function Words() {
           )}
         </div>
 
-        {/* Category Pill Filters */}
+        {/* Category Filters */}
         <div
           role="group"
           aria-label="Filter vocabulary by category"
-          style={{
-            display: 'flex',
-            gap: '6px',
-            overflowX: 'auto',
-            paddingBottom: '8px',
-            marginBottom: '12px',
-            scrollbarWidth: 'none'
-          }}
+          style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '12px', flexShrink: 0 }}
         >
           {CATEGORIES.map((cat) => {
             const isCatActive = selectedCategory === cat.id;
@@ -232,15 +214,14 @@ export default function Words() {
                 onClick={() => setSelectedCategory(cat.id)}
                 style={{
                   padding: '6px 12px',
-                  borderRadius: '16px',
-                  border: isCatActive ? '1px solid #003366' : '1px solid #cbd5e1',
-                  backgroundColor: isCatActive ? '#003366' : '#ffffff',
-                  color: isCatActive ? '#ffffff' : '#334155',
+                  borderRadius: '10px',
+                  border: isCatActive ? '1px solid #7CA992' : '1px solid #3A443F',
+                  backgroundColor: isCatActive ? '#7CA992' : '#242A27',
+                  color: isCatActive ? '#0D1310' : '#B5C5BC',
                   fontSize: '12px',
                   fontWeight: '700',
                   cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease'
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {cat.label}
@@ -249,25 +230,23 @@ export default function Words() {
           })}
         </div>
 
-        {/* Word Counter Header */}
+        {/* Word Counter */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span role="status" aria-live="polite" style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>
+          <span role="status" aria-live="polite" style={{ fontSize: '12px', fontWeight: '700', color: '#A3CBB7' }}>
             SHOWING {displayedWords.length} SIGNS
           </span>
-          <span style={{ fontSize: '11px', color: '#475569' }}>
-            Click or use ↑ ↓ &amp; Enter
-          </span>
+          <span style={{ fontSize: '11px', color: '#9CAEA4' }}>Click or use Arrow Keys &amp; Enter</span>
         </div>
 
-        {/* Word Grid / List */}
-        <div 
-          style={{ 
-            flex: 1, 
-            overflowY: 'auto', 
-            display: 'grid', 
+        {/* Word Grid */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
-            gap: '10px', 
-            paddingRight: '6px' 
+            gap: '10px',
+            paddingRight: '6px'
           }}
         >
           {visibleWords.length > 0 ? (
@@ -283,24 +262,19 @@ export default function Words() {
                     onKeyDown={(e) => handleKeyDown(e, item)}
                     style={{
                       minHeight: '44px',
-                      padding: '10px 12px', 
-                      borderRadius: '8px', 
-                      cursor: 'pointer', 
-                      fontSize: '15px', 
-                      fontWeight: 'bold',
-                      fontFamily: '"Times New Roman", Times, serif',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '700',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       textAlign: 'center',
-                      backgroundColor: isSelected ? '#15803d' : '#ffffff',
-                      color: isSelected ? '#ffffff' : '#14532d',
-                      border: isSelected ? '2px solid #166534' : '1.5px solid #cbd5e1',
-                      transition: 'all 0.15s ease',
-                      boxShadow: isSelected ? '0 4px 10px rgba(21, 128, 61, 0.3)' : '0 1px 3px rgba(0,0,0,0.04)',
-                      userSelect: 'none',
-                      wordBreak: 'break-word',
-                      lineHeight: '1.2'
+                      backgroundColor: isSelected ? '#7CA992' : '#242A27',
+                      color: isSelected ? '#0D1310' : '#E4EAE6',
+                      border: isSelected ? '1.5px solid #A3CBB7' : '1px solid #3A443F',
+                      lineHeight: '1.25'
                     }}
                   >
                     {item.label}
@@ -313,13 +287,13 @@ export default function Words() {
                     type="button"
                     onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
                     style={{
-                      backgroundColor: '#003366',
-                      color: '#ffffff',
+                      backgroundColor: '#7CA992',
+                      color: '#0D1310',
                       border: 'none',
                       padding: '10px 20px',
                       borderRadius: '10px',
                       fontSize: '13px',
-                      fontWeight: '700',
+                      fontWeight: '800',
                       cursor: 'pointer'
                     }}
                   >
@@ -329,12 +303,24 @@ export default function Words() {
               )}
             </>
           ) : (
-            <div role="status" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 10px', color: '#475569' }}>
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 10px', color: '#B5C5BC' }}>
               <p style={{ margin: 0, fontSize: '15px' }}>No words match &quot;{searchTerm}&quot;.</p>
               <button
                 type="button"
-                onClick={() => { setSearchTerm(''); setSelectedCategory('all'); }}
-                style={{ marginTop: '10px', backgroundColor: '#e2e8f0', border: 'none', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', color: '#1e293b' }}
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedCategory('all');
+                }}
+                style={{
+                  marginTop: '12px',
+                  backgroundColor: '#242A27',
+                  border: '1px solid #3A443F',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                  color: '#E4EAE6'
+                }}
               >
                 Clear Filters
               </button>
@@ -343,137 +329,86 @@ export default function Words() {
         </div>
       </div>
 
-      {/* Right Panel: 3D Avatar Viewer & Bottom Gloss HUD */}
-      <div 
+      {/* Right Panel: 3D Avatar Viewer & Sage Gloss HUD */}
+      <div
         className="signverse-panel-right"
         style={{
           width: '55%',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#e5e7eb',
+          backgroundColor: '#191C1A',
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        {/* Avatar Viewport Frame (Upper section) */}
-        <div 
+        <div
           className="signverse-avatar-frame"
-          style={{
-            flex: 1,
-            width: '100%',
-            height: '100%',
-            position: 'relative',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: '#e5e7eb'
-          }}
+          style={{ flex: 1, width: '100%', height: '100%', position: 'relative', backgroundColor: '#191C1A' }}
         >
-          <iframe 
-            ref={iframeRef} 
-            src="/player-applet.html" 
+          <iframe
+            ref={iframeRef}
+            src="/player-applet.html"
             title="CWASA Avatar Player"
-            className="signverse-avatar-iframe"
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              display: 'block'
-            }}
             onLoad={handleIframeLoad}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           />
         </div>
 
-        {/* Right Panel BOTTOM Gloss & Sign Details HUD (Green Theme with Times New Roman) */}
         <div
           style={{
-            padding: '12px 20px',
-            background: 'linear-gradient(180deg, #052e16 0%, #14532d 100%)',
-            color: '#ffffff',
-            borderTop: '3px solid #22c55e',
+            padding: '14px 20px',
+            backgroundColor: '#141715',
+            color: '#E4EAE6',
+            borderTop: '1px solid #2D3531',
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'space-between',
+            alignItems: 'center',
             flexWrap: 'wrap',
-            gap: '12px',
-            zIndex: 10,
-            boxShadow: '0 -4px 14px rgba(0,0,0,0.25)',
-            fontFamily: '"Times New Roman", Times, serif'
+            gap: '10px'
           }}
         >
-          {/* Active Gloss Badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#86efac', textTransform: 'uppercase', letterSpacing: '1px' }}>
-              ACTIVE GLOSS:
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#7CA992', textTransform: 'uppercase' }}>
+              Active Word
             </span>
-            <span
-              style={{
-                backgroundColor: 'rgba(34, 197, 94, 0.25)',
-                color: '#4ade80',
-                border: '1.5px solid #22c55e',
-                padding: '4px 16px',
-                borderRadius: '8px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                letterSpacing: '1px',
-                fontFamily: '"Times New Roman", Times, serif'
-              }}
-            >
-              {liveGloss || selectedWord?.label || 'HELLO'}
+            <span style={{ backgroundColor: 'rgba(124,169,146,0.16)', color: '#A3CBB7', border: '1px solid rgba(124,169,146,0.35)', padding: '4px 12px', borderRadius: '8px', fontSize: '16px', fontWeight: '800' }}>
+              {liveGloss || (selectedWord ? selectedWord.label : 'None')}
             </span>
-            <span
-              style={{
-                fontSize: '12px',
-                backgroundColor: isPlaying ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                color: isPlaying ? '#4ade80' : '#bbf7d0',
-                border: isPlaying ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.2)',
-                padding: '4px 10px',
-                borderRadius: '12px',
-                fontWeight: 'bold'
-              }}
-            >
-              {isPlaying ? '🟢 Signing...' : '⚪ Ready'}
-            </span>
+            {selectedWord && (
+              <span style={{ fontSize: '12px', color: '#9CAEA4' }}>
+                {selectedWord.category} ({resolveSigmlPath(selectedWord.file)})
+              </span>
+            )}
           </div>
 
-          {/* Details & Replay Strip */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
-            <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '5px 12px', borderRadius: '6px', color: '#dcfce7', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-              Category: <strong style={{ color: '#ffffff' }}>{selectedWord?.category || 'General'}</strong>
-            </span>
-            <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '5px 12px', borderRadius: '6px', color: '#86efac', fontFamily: 'monospace', fontSize: '12px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-              {selectedWord ? resolveSigmlPath(selectedWord.file) : 'SignFiles/hello.sigml'}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {liveFrame && (
-              <span style={{ backgroundColor: '#052e16', padding: '5px 10px', borderRadius: '6px', color: '#4ade80', fontFamily: 'monospace', fontWeight: 'bold', border: '1px solid #22c55e' }}>
+              <span style={{ backgroundColor: '#242A27', padding: '4px 10px', borderRadius: '8px', color: '#A3CBB7', fontFamily: 'monospace', fontSize: '12px', border: '1px solid #3A443F' }}>
                 Frame: {liveFrame}
               </span>
             )}
             <button
+              type="button"
               onClick={() => selectedWord && handleWordAction(selectedWord)}
+              disabled={!selectedWord || isPlaying}
               style={{
-                backgroundColor: '#16a34a',
-                color: '#ffffff',
-                border: '1px solid #22c55e',
+                backgroundColor: '#7CA992',
+                color: '#0D1310',
+                border: 'none',
                 padding: '6px 14px',
                 borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                fontFamily: '"Times New Roman", Times, serif',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                boxShadow: '0 2px 8px rgba(22, 163, 74, 0.4)'
+                fontSize: '12.5px',
+                fontWeight: '800',
+                cursor: !selectedWord || isPlaying ? 'not-allowed' : 'pointer',
+                opacity: isPlaying ? 0.7 : 1
               }}
             >
-              🔄 Replay
+              {isPlaying ? 'Signing...' : 'Replay Sign'}
             </button>
           </div>
         </div>
       </div>
-
     </div>
   );
 }

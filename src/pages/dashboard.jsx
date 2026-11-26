@@ -1,21 +1,165 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { updateStreak } from '../utils/streakManager';
+import { getStreak } from '../utils/streakManager';
+import { TEXT_TO_SIGN_TRACK, SIGN_TO_TEXT_TRACK } from '../data/dualTrackCourses';
+
+const SAFE_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const MAX_AVATAR_BYTES = 1.5 * 1024 * 1024;
+
+function readJsonArray(key) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function getRankData(xp) {
+  if (xp >= 3500) {
+    return {
+      rank: 'Sign Master',
+      icon: '👑',
+      tierMin: 3500,
+      tierMax: 5000,
+      nextRank: 'Max Tier Reached',
+      percent: Math.min(100, Math.round(((xp - 3500) / 1500) * 100)),
+      remaining: 0,
+      tierLevel: 'Level 5'
+    };
+  }
+  if (xp >= 2200) {
+    return {
+      rank: 'Emerald Master',
+      icon: '💎',
+      tierMin: 2200,
+      tierMax: 3500,
+      nextRank: 'Sign Master',
+      percent: Math.round(((xp - 2200) / (3500 - 2200)) * 100),
+      remaining: 3500 - xp,
+      tierLevel: 'Level 4'
+    };
+  }
+  if (xp >= 1200) {
+    return {
+      rank: 'Adept',
+      icon: '🌲',
+      tierMin: 1200,
+      tierMax: 2200,
+      nextRank: 'Emerald Master',
+      percent: Math.round(((xp - 1200) / (2200 - 1200)) * 100),
+      remaining: 2200 - xp,
+      tierLevel: 'Level 3'
+    };
+  }
+  if (xp >= 500) {
+    return {
+      rank: 'Apprentice',
+      icon: '🌿',
+      tierMin: 500,
+      tierMax: 1200,
+      nextRank: 'Adept',
+      percent: Math.round(((xp - 500) / (1200 - 500)) * 100),
+      remaining: 1200 - xp,
+      tierLevel: 'Level 2'
+    };
+  }
+  return {
+    rank: 'Novice',
+    icon: '🌱',
+    tierMin: 0,
+    tierMax: 500,
+    nextRank: 'Apprentice',
+    percent: Math.round((xp / 500) * 100),
+    remaining: Math.max(0, 500 - xp),
+    tierLevel: 'Level 1'
+  };
+}
+
+function buildLast7DaysVolume(quizHistory, practiceHistory) {
+  const days = [];
+  const today = new Date();
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - offset);
+    days.push({
+      dateKey: d.toDateString(),
+      day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+      count: 0,
+      today: offset === 0
+    });
+  }
+
+  const allSessions = [...quizHistory, ...practiceHistory];
+  allSessions.forEach((rec) => {
+    const ts = typeof rec.id === 'number' ? rec.id : Date.parse(rec.date || '');
+    if (!Number.isFinite(ts)) return;
+    const key = new Date(ts).toDateString();
+    const bucket = days.find((d) => d.dateKey === key);
+    if (bucket) {
+      bucket.count += Number(rec.total) || 0;
+    }
+  });
+
+  return days;
+}
+
+function computeResumeCourse(completedLessons) {
+  const completedSet = new Set(completedLessons);
+  const freeModules = TEXT_TO_SIGN_TRACK.filter((m) => !m.isLocked);
+
+  for (const mod of freeModules) {
+    const doneInMod = mod.lessons.filter((l) => completedSet.has(l.id)).length;
+    const nextLesson = mod.lessons.find((l) => !completedSet.has(l.id));
+    if (nextLesson) {
+      return {
+        moduleId: mod.id,
+        moduleTitle: mod.title,
+        lessonId: nextLesson.id,
+        lessonTitle: nextLesson.title,
+        lessonXp: nextLesson.xp,
+        doneInMod,
+        totalInMod: mod.lessons.length,
+        percent: Math.round((doneInMod / mod.lessons.length) * 100),
+        allDone: false
+      };
+    }
+  }
+
+  const lastFree = freeModules[freeModules.length - 1] || TEXT_TO_SIGN_TRACK[0];
+  const lastLesson = lastFree.lessons[lastFree.lessons.length - 1];
+  return {
+    moduleId: lastFree.id,
+    moduleTitle: lastFree.title,
+    lessonId: lastLesson.id,
+    lessonTitle: lastLesson.title,
+    lessonXp: lastLesson.xp,
+    doneInMod: lastFree.lessons.length,
+    totalInMod: lastFree.lessons.length,
+    percent: 100,
+    allDone: true
+  };
+}
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
-    quizAccuracy: 92.4,
-    totalQuizzes: 14,
-    practiceCount: 168,
-    streak: 7,
-    userLevel: 'Emerald Master 💎',
-    totalXP: 2450
+    userName: 'Learner',
+    quizAccuracy: null,
+    totalQuizzes: 0,
+    practiceCount: 0,
+    translationsCount: 0,
+    completedCount: 0,
+    streak: 0,
+    totalXP: 0,
+    quizHistory: [],
+    practiceHistory: [],
+    completedLessons: []
   });
 
-  const [greeting, setGreeting] = useState('');
+  const [greeting, setGreeting] = useState('Welcome Back');
   const [userAvatarPhoto, setUserAvatarPhoto] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [leaderboardTab, setLeaderboardTab] = useState('weekly'); // 'weekly' | 'alltime'
+  const [activityTab, setActivityTab] = useState('all'); // 'all' | 'quiz' | 'practice'
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [uploadError, setUploadError] = useState('');
 
@@ -23,167 +167,174 @@ export default function Dashboard() {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Dynamic Time Greeting
   useEffect(() => {
-    const updateGreeting = () => {
-      const now = new Date();
-      const hour = now.getHours();
-      if (hour >= 22 || hour < 4) setGreeting('Late Night Session');
-      else if (hour >= 4 && hour < 12) setGreeting('Good Morning');
-      else if (hour >= 12 && hour < 17) setGreeting('Good Afternoon');
-      else setGreeting('Good Evening');
-    };
-    updateGreeting();
+    const hour = new Date().getHours();
+    if (hour >= 22 || hour < 4) setGreeting('Late Night Session');
+    else if (hour >= 4 && hour < 12) setGreeting('Good Morning');
+    else if (hour >= 12 && hour < 17) setGreeting('Good Afternoon');
+    else setGreeting('Good Evening');
   }, []);
 
-  // Load User Stats & History
   useEffect(() => {
     try {
-      const quizHistory = JSON.parse(localStorage.getItem('quizHistory')) || [];
-      const practiceHistory = JSON.parse(localStorage.getItem('practiceHistory')) || [];
+      const quizHistory = readJsonArray('quizHistory');
+      const practiceHistory = readJsonArray('practiceHistory');
+      const completedLessons = readJsonArray('signverse_completed_lessons');
       const savedPhoto = localStorage.getItem('userAvatarPhoto');
-      const activeStreak = updateStreak();
+      const storedName = localStorage.getItem('userName');
+      const translationsCount = parseInt(localStorage.getItem('signverse_translation_count') || '0', 10) || 0;
+      const activeStreak = getStreak();
 
-      let accuracy = 92.4;
-      let totalQ = quizHistory.length || 14;
-
+      let accuracy = null;
+      let totalCorrectQuiz = 0;
       if (quizHistory.length > 0) {
-        const correct = quizHistory.reduce((acc, curr) => acc + curr.score, 0);
-        const possible = quizHistory.reduce((acc, curr) => acc + curr.total, 0);
-        accuracy = possible > 0 ? Number(((correct / possible) * 100).toFixed(1)) : 92.4;
+        totalCorrectQuiz = quizHistory.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0);
+        const possible = quizHistory.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
+        accuracy = possible > 0 ? Number(((totalCorrectQuiz / possible) * 100).toFixed(1)) : 0;
       }
 
-      let rank = 'Emerald Master 💎';
-      if (accuracy >= 90) rank = 'Emerald Master 💎';
-      else if (accuracy >= 75) rank = 'Forest Pro 🌲';
-      else if (accuracy >= 55) rank = 'Sage Explorer 🌿';
-      else rank = 'Apprentice 🌱';
+      const totalPracticed = practiceHistory.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
 
-      const totalPracticed = practiceHistory.reduce((acc, curr) => acc + curr.total, 0) || 168;
+      // Compute lesson XP strictly from completed lessons/drills inside curriculum catalog
+      const completedSet = new Set(completedLessons);
+      const lessonXp = [...TEXT_TO_SIGN_TRACK, ...SIGN_TO_TEXT_TRACK]
+        .flatMap((m) => m.lessons || m.drills || [])
+        .filter((l) => l && completedSet.has(l.id))
+        .reduce((acc, l) => acc + (Number(l.xp) || 25), 0);
+
+      const computedXP = lessonXp + totalCorrectQuiz * 15 + totalPracticed * 5 + translationsCount * 2;
 
       if (savedPhoto) setUserAvatarPhoto(savedPhoto);
 
       setStats({
+        userName: storedName && storedName.trim() ? storedName.trim() : 'Learner',
         quizAccuracy: accuracy,
-        totalQuizzes: totalQ,
+        totalQuizzes: quizHistory.length,
         practiceCount: totalPracticed,
-        streak: activeStreak || 7,
-        userLevel: rank,
-        totalXP: 2450 + totalPracticed * 5
+        translationsCount,
+        completedCount: completedLessons.length,
+        streak: activeStreak,
+        totalXP: computedXP,
+        quizHistory,
+        practiceHistory,
+        completedLessons
       });
     } catch (e) {
       console.warn('Dashboard load error:', e);
     }
   }, []);
 
-
-
-  // 7-Day Weekly Sign Volume
-  const weeklyData = [
-    { day: 'Mon', count: 24, active: true },
-    { day: 'Tue', count: 32, active: true },
-    { day: 'Wed', count: 18, active: true },
-    { day: 'Thu', count: 45, active: true },
-    { day: 'Fri', count: 38, active: true },
-    { day: 'Sat', count: 52, active: true },
-    { day: 'Sun', count: 28, active: true, today: true }
-  ];
-
-  // XP-driven Rank Progression (Novice -> Apprentice -> Adept -> Emerald Master -> Sign Master)
-  const getRankData = (xp) => {
-    if (xp >= 3500) {
-      return {
-        rank: 'Sign Master',
-        icon: '👑',
-        tierMin: 3500,
-        tierMax: 5000,
-        nextRank: 'Grandmaster Elite (Prestige)',
-        percent: Math.min(100, Math.round(((xp - 3500) / 1500) * 100)),
-        remaining: 0,
-        badgeColor: '#facc15',
-        tierLevel: 'Level 5 (Max Tier)'
-      };
-    } else if (xp >= 2200) {
-      return {
-        rank: 'Emerald Master',
-        icon: '💎',
-        tierMin: 2200,
-        tierMax: 3500,
-        nextRank: 'Sign Master 👑',
-        percent: Math.round(((xp - 2200) / (3500 - 2200)) * 100),
-        remaining: 3500 - xp,
-        badgeColor: '#10b981',
-        tierLevel: 'Level 4'
-      };
-    } else if (xp >= 1200) {
-      return {
-        rank: 'Adept',
-        icon: '🌲',
-        tierMin: 1200,
-        tierMax: 2200,
-        nextRank: 'Emerald Master 💎',
-        percent: Math.round(((xp - 1200) / (2200 - 1200)) * 100),
-        remaining: 2200 - xp,
-        badgeColor: '#34d399',
-        tierLevel: 'Level 3'
-      };
-    } else if (xp >= 500) {
-      return {
-        rank: 'Apprentice',
-        icon: '🌿',
-        tierMin: 500,
-        tierMax: 1200,
-        nextRank: 'Adept 🌲',
-        percent: Math.round(((xp - 500) / (1200 - 500)) * 100),
-        remaining: 1200 - xp,
-        badgeColor: '#6ee7b7',
-        tierLevel: 'Level 2'
-      };
-    } else {
-      return {
-        rank: 'Novice',
-        icon: '🌱',
-        tierMin: 0,
-        tierMax: 500,
-        nextRank: 'Apprentice 🌿',
-        percent: Math.round((xp / 500) * 100),
-        remaining: 500 - xp,
-        badgeColor: '#a7f3d0',
-        tierLevel: 'Level 1'
-      };
-    }
-  };
-
   const rankData = getRankData(stats.totalXP);
+  const resumeInfo = computeResumeCourse(stats.completedLessons);
+  const weeklyData = buildLast7DaysVolume(stats.quizHistory, stats.practiceHistory);
+  const weeklyTotal = weeklyData.reduce((sum, d) => sum + d.count, 0);
 
-  // Weekly & All-Time Competitive Leaderboard Data
-  const weeklyLeaderboard = [
-    { rank: 1, name: 'Elena Rostova', xp: 3820, tier: 'Sign Master', flag: '🇺🇸', streak: 14, avatar: '👩‍💼', isUser: false },
-    { rank: 2, name: 'Marcus Chen', xp: 3410, tier: 'Emerald Master', flag: '🇸🇬', streak: 9, avatar: '👨‍💻', isUser: false },
-    { rank: 3, name: 'Aarav Sharma', xp: 2890, tier: 'Emerald Master', flag: '🇮🇳', streak: 12, avatar: '👨‍🎓', isUser: false },
-    { rank: 4, name: 'You (Alex)', xp: stats.totalXP, tier: rankData.rank, flag: '🌐', streak: stats.streak, avatar: '👤', isUser: true },
-    { rank: 5, name: 'Sophia Vance', xp: 2180, tier: 'Adept', flag: '🇬🇧', streak: 5, avatar: '👩‍🔬', isUser: false },
-    { rank: 6, name: 'Kenji Sato', xp: 1940, tier: 'Adept', flag: '🇯🇵', streak: 6, avatar: '👨‍🎨', isUser: false },
-    { rank: 7, name: 'Liam O’Connor', xp: 1620, tier: 'Adept', flag: '🇮🇪', streak: 4, avatar: '🧑‍🚀', isUser: false }
+  // Merge chronological real activity log
+  const mergedActivities = [
+    ...stats.quizHistory.map((q, idx) => ({
+      id: `quiz-${q.id || idx}`,
+      ts: typeof q.id === 'number' ? q.id : 0,
+      kind: 'quiz',
+      label: 'Skill Verification Quiz',
+      detail: `${q.score}/${q.total} correct`,
+      pct: q.total > 0 ? Math.round((q.score / q.total) * 100) : 0,
+      date: q.date || 'Recorded session',
+      xpEarned: (Number(q.score) || 0) * 15
+    })),
+    ...stats.practiceHistory.map((p, idx) => ({
+      id: `practice-${p.id || idx}`,
+      ts: typeof p.id === 'number' ? p.id : 0,
+      kind: 'practice',
+      label: 'Flashcard Practice',
+      detail: `${p.score}/${p.total} recalled`,
+      pct: p.total > 0 ? Math.round((p.score / p.total) * 100) : 0,
+      date: p.date || 'Recorded session',
+      xpEarned: (Number(p.total) || 0) * 5
+    }))
+  ]
+    .sort((a, b) => b.ts - a.ts)
+    .filter((item) => activityTab === 'all' || item.kind === activityTab);
+
+  // Last 7 real quizzes for SVG accuracy trajectory
+  const recentQuizzesForChart = [...stats.quizHistory]
+    .slice(0, 7)
+    .reverse()
+    .map((q, idx) => {
+      const pct = q.total > 0 ? Math.round((q.score / q.total) * 100) : 0;
+      return {
+        label: `Q${idx + 1}`,
+        pct,
+        date: q.date || ''
+      };
+    });
+
+  // Real curriculum progress breakdown
+  const completedSet = new Set(stats.completedLessons);
+  const freeTtsLessons = TEXT_TO_SIGN_TRACK.filter((m) => !m.isLocked).flatMap((m) => m.lessons || []);
+  const allTtsLessons = TEXT_TO_SIGN_TRACK.flatMap((m) => m.lessons || []);
+  const allSttLessons = SIGN_TO_TEXT_TRACK.flatMap((m) => m.drills || m.lessons || []);
+
+  const freeTtsDone = freeTtsLessons.filter((l) => l && completedSet.has(l.id)).length;
+  const allTtsDone = allTtsLessons.filter((l) => l && completedSet.has(l.id)).length;
+  const allSttDone = allSttLessons.filter((l) => l && completedSet.has(l.id)).length;
+
+  const progressDomains = [
+    {
+      domain: 'Free 3D Avatar Modules (1-5)',
+      percent: freeTtsLessons.length > 0 ? Math.round((freeTtsDone / freeTtsLessons.length) * 100) : 0,
+      summary: `${freeTtsDone} / ${freeTtsLessons.length} lessons`
+    },
+    {
+      domain: 'Full 3D Avatar Curriculum (Modules 1-15)',
+      percent: allTtsLessons.length > 0 ? Math.round((allTtsDone / allTtsLessons.length) * 100) : 0,
+      summary: `${allTtsDone} / ${allTtsLessons.length} lessons`
+    },
+    {
+      domain: 'LiveCam Sign-to-Text Curriculum',
+      percent: allSttLessons.length > 0 ? Math.round((allSttDone / allSttLessons.length) * 100) : 0,
+      summary: `${allSttDone} / ${allSttLessons.length} drills`
+    },
+    {
+      domain: 'Quiz Recall Accuracy',
+      percent: stats.quizAccuracy !== null ? Math.round(stats.quizAccuracy) : 0,
+      summary: stats.quizAccuracy !== null ? `${stats.quizAccuracy}% across ${stats.totalQuizzes} quiz(zes)` : 'No quiz attempts yet'
+    }
   ];
 
-  const alltimeLeaderboard = [
-    { rank: 1, name: 'David Kim', xp: 12450, tier: 'Sign Master', flag: '🇰🇷', streak: 45, avatar: '👨‍💼', isUser: false },
-    { rank: 2, name: 'Elena Rostova', xp: 9820, tier: 'Sign Master', flag: '🇺🇸', streak: 28, avatar: '👩‍💼', isUser: false },
-    { rank: 3, name: 'Maya Patel', xp: 8740, tier: 'Sign Master', flag: '🇮🇳', streak: 31, avatar: '👩‍🎓', isUser: false },
-    { rank: 4, name: 'Marcus Chen', xp: 7410, tier: 'Sign Master', flag: '🇸🇬', streak: 22, avatar: '👨‍💻', isUser: false },
-    { rank: 5, name: 'Amara Okafor', xp: 6200, tier: 'Emerald Master', flag: '🇳🇬', streak: 19, avatar: '👩‍⚕️', isUser: false },
-    { rank: 12, name: 'You (Alex)', xp: stats.totalXP, tier: rankData.rank, flag: '🌐', streak: stats.streak, avatar: '👤', isUser: true }
+  // Genuine milestone checks
+  const milestones = [
+    {
+      icon: '🤟',
+      title: 'First Steps in ISL',
+      desc: 'Complete 1 lesson or run 1 translation',
+      unlocked: stats.completedCount >= 1 || stats.translationsCount >= 1
+    },
+    {
+      icon: '🎯',
+      title: 'Quiz Qualifier',
+      desc: 'Score 70%+ average accuracy across quizzes',
+      unlocked: stats.totalQuizzes >= 1 && (stats.quizAccuracy ?? 0) >= 70
+    },
+    {
+      icon: '🃏',
+      title: 'Flashcard Regular',
+      desc: 'Review at least 10 signs in Practice mode',
+      unlocked: stats.practiceCount >= 10
+    },
+    {
+      icon: '🔥',
+      title: '5-Day Learning Streak',
+      desc: 'Practice on 5 consecutive calendar days',
+      unlocked: stats.streak >= 5
+    }
   ];
+  const unlockedMilestoneCount = milestones.filter((m) => m.unlocked).length;
 
-  // Avatar Photo Handlers (strict type & size validation to prevent XSS/SVG uploads & quota crashes)
-  const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-  const MAX_AVATAR_BYTES = 1.5 * 1024 * 1024;
-
+  // Avatar Photo Handlers (strict type & size validation)
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    if (!SAFE_IMAGE_TYPES.includes(file.type)) {
       setUploadError('Please upload a PNG, JPEG, or WebP image.');
       return;
     }
@@ -213,8 +364,8 @@ export default function Dashboard() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-    } catch (err) {
-      console.error('Camera access denied:', err);
+    } catch {
+      setUploadError('Camera permission was denied or unavailable.');
       setIsCameraOpen(false);
     }
   };
@@ -225,7 +376,11 @@ export default function Dashboard() {
       context.drawImage(videoRef.current, 0, 0, 200, 200);
       const dataUrl = canvasRef.current.toDataURL('image/png');
       setUserAvatarPhoto(dataUrl);
-      localStorage.setItem('userAvatarPhoto', dataUrl);
+      try {
+        localStorage.setItem('userAvatarPhoto', dataUrl);
+      } catch {
+        setUploadError('Image is too large for browser storage.');
+      }
       stopCamera();
     }
   };
@@ -250,10 +405,7 @@ export default function Dashboard() {
       }}
     >
       <div style={{ maxWidth: '1240px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
-        
-        {/* =========================================================================
-            1. ACCESSIBLE SAGE HEADER & PROFILE OVERVIEW
-        ========================================================================= */}
+        {/* 1. HEADER & PROFILE */}
         <div
           style={{
             marginBottom: '36px',
@@ -266,9 +418,7 @@ export default function Dashboard() {
             borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
           }}
         >
-          {/* User Profile & Greeting */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
-            {/* Avatar */}
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
@@ -298,11 +448,13 @@ export default function Dashboard() {
                 )}
               </button>
 
-              {/* Snapshot Camera Trigger */}
               <button
                 type="button"
                 aria-label="Take profile photo with camera"
-                onClick={(e) => { e.stopPropagation(); startCamera(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startCamera();
+                }}
                 title="Take photo with camera"
                 style={{
                   position: 'absolute',
@@ -325,20 +477,6 @@ export default function Dashboard() {
                 <span aria-hidden="true">📷</span>
               </button>
 
-              {/* Status Indicator */}
-              <div
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  bottom: '-2px',
-                  right: '-2px',
-                  width: '16px',
-                  height: '16px',
-                  borderRadius: '50%',
-                  background: '#7CA992',
-                  border: '2px solid #191C1A'
-                }}
-              />
               <input
                 type="file"
                 aria-label="Choose profile photo file"
@@ -355,7 +493,7 @@ export default function Dashboard() {
             </div>
 
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
                 <span
                   style={{
                     fontSize: '11px',
@@ -369,33 +507,32 @@ export default function Dashboard() {
                     border: '1px solid rgba(124, 169, 146, 0.28)'
                   }}
                 >
-                  {stats.userLevel}
+                  {rankData.icon} {rankData.rank} ({rankData.tierLevel})
                 </span>
                 <span style={{ fontSize: '13px', color: '#9CAEA4' }}>•</span>
-                <span style={{ fontSize: '13px', color: '#9CAEA4', letterSpacing: '0.2px' }}>
+                <span style={{ fontSize: '13px', color: '#9CAEA4' }}>
                   {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                 </span>
               </div>
 
               <h1
                 style={{
-                  fontSize: 'clamp(28px, 3.5vw, 42px)',
+                  fontSize: 'clamp(28px, 3.5vw, 40px)',
                   fontWeight: '800',
                   margin: 0,
                   letterSpacing: '-0.8px',
                   color: '#E4EAE6'
                 }}
               >
-                {greeting}, <span style={{ color: '#7CA992' }}>Signer</span>
+                {greeting}, <span style={{ color: '#7CA992' }}>{stats.userName}</span>
               </h1>
               <p style={{ margin: '6px 0 0', fontSize: '14.5px', color: '#9CAEA4' }}>
-                Your comprehensive mastery progress, daily rhythm, and precision accuracy overview.
+                Live learning metrics computed strictly from your recorded quizzes, practice drills, and completed lessons.
               </p>
             </div>
           </div>
 
-          {/* Quick Hub Navigation Buttons */}
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             <Link
               to="/text-to-sign"
               style={{
@@ -404,16 +541,15 @@ export default function Dashboard() {
                 borderRadius: '14px',
                 background: 'rgba(124, 169, 146, 0.12)',
                 border: '1px solid rgba(124, 169, 146, 0.25)',
-                color: '#7CA992',
+                color: '#A3CBB7',
                 fontSize: '13.5px',
                 fontWeight: '700',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                transition: 'all 0.2s'
+                gap: '8px'
               }}
             >
-              <span>🗣️ 3D Translator</span>
+              <span>3D Translator</span>
             </Link>
 
             <Link
@@ -428,17 +564,15 @@ export default function Dashboard() {
                 fontWeight: '800',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s'
+                gap: '8px'
               }}
             >
-              <span>📷 LiveCam Studio</span>
+              <span>LiveCam Studio</span>
             </Link>
           </div>
         </div>
 
-        {/* Camera Modal if taking picture */}
+        {/* Camera Modal */}
         {isCameraOpen && (
           <div
             role="dialog"
@@ -464,11 +598,12 @@ export default function Dashboard() {
                 padding: '24px',
                 maxWidth: '380px',
                 width: '100%',
-                textAlign: 'center',
-                boxShadow: '0 12px 40px rgba(0, 0, 0, 0.35)'
+                textAlign: 'center'
               }}
             >
-              <h2 id="snap-photo-title" style={{ margin: '0 0 16px', color: '#E4EAE6', fontSize: '18px' }}>Snap Profile Photo</h2>
+              <h2 id="snap-photo-title" style={{ margin: '0 0 16px', color: '#E4EAE6', fontSize: '18px' }}>
+                Snap Profile Photo
+              </h2>
               <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.08)' }} />
               <canvas ref={canvasRef} width="200" height="200" style={{ display: 'none' }} />
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
@@ -491,14 +626,10 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* =========================================================================
-            PROMINENT RESUME COURSE / CURRENT LESSON HERO CARD
-        ========================================================================= */}
+        {/* RESUME LESSON HERO CARD (BACKED BY REAL DUAL-TRACK PROGRESS) */}
         <div
           style={{
             background: '#242A27',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
             borderRadius: '24px',
             padding: '26px 32px',
@@ -508,14 +639,12 @@ export default function Dashboard() {
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: '24px',
-            position: 'relative',
-            overflow: 'hidden'
+            gap: '24px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '22px', zIndex: 1, flex: '1 1 520px' }}>
-            {/* Visual Icon Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '22px', flex: '1 1 480px' }}>
             <div
+              aria-hidden="true"
               style={{
                 width: '68px',
                 height: '68px',
@@ -540,7 +669,7 @@ export default function Dashboard() {
                     fontWeight: '800',
                     letterSpacing: '0.8px',
                     textTransform: 'uppercase',
-                    color: '#7CA992',
+                    color: '#A3CBB7',
                     background: 'rgba(124, 169, 146, 0.14)',
                     padding: '3px 10px',
                     borderRadius: '8px',
@@ -549,38 +678,39 @@ export default function Dashboard() {
                 >
                   Active Curriculum • Dual Track
                 </span>
-                <span style={{ fontSize: '12px', color: '#9CAEA4' }}>•</span>
-                <span style={{ fontSize: '12.5px', color: '#7CA992', fontWeight: '800', letterSpacing: '0.2px' }}>
-                  +50 XP Rank Point on Completion
+                <span style={{ fontSize: '12.5px', color: '#7CA992', fontWeight: '700' }}>
+                  +{resumeInfo.lessonXp} XP on completion
                 </span>
               </div>
 
-              <h2 style={{ margin: '0 0 5px', fontSize: '22px', fontWeight: '800', color: '#E4EAE6', letterSpacing: '-0.4px' }}>
-                Everyday Basics & Greetings
+              <h2 style={{ margin: '0 0 5px', fontSize: '22px', fontWeight: '800', color: '#E4EAE6' }}>
+                {resumeInfo.moduleTitle}
               </h2>
               <p style={{ margin: '0 0 14px', fontSize: '13.5px', color: '#9CAEA4' }}>
-                Next Up: <strong style={{ color: '#E4EAE6' }}>Lesson 2 — Expressing Gratitude (&quot;Thank You&quot;)</strong> • 3D Avatar Luna Instruction
+                {resumeInfo.allDone ? (
+                  <>Completed all free 3D lessons — review <strong style={{ color: '#E4EAE6' }}>{resumeInfo.lessonTitle}</strong></>
+                ) : (
+                  <>Next Lesson: <strong style={{ color: '#E4EAE6' }}>{resumeInfo.lessonTitle}</strong></>
+                )}
               </p>
 
-              {/* Progress Bar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', maxWidth: '440px' }}>
                 <div style={{ flex: 1, height: '7px', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ width: '65%', height: '100%', background: '#7CA992', borderRadius: '4px' }} />
+                  <div style={{ width: `${resumeInfo.percent}%`, height: '100%', background: '#7CA992', borderRadius: '4px' }} />
                 </div>
-                <span style={{ fontSize: '12px', color: '#7CA992', fontWeight: '800', whiteSpace: 'nowrap' }}>
-                  65% Completed (1 of 4 Mastered)
+                <span style={{ fontSize: '12px', color: '#A3CBB7', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                  {resumeInfo.percent}% ({resumeInfo.doneInMod} of {resumeInfo.totalInMod} mastered)
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Action CTAs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <Link
-              to="/courses/text-to-sign/tts-mod-1/tts-l1-2"
+              to={`/courses/text-to-sign/${resumeInfo.moduleId}/${resumeInfo.lessonId}`}
               style={{
                 textDecoration: 'none',
-                padding: '13px 26px',
+                padding: '13px 24px',
                 borderRadius: '14px',
                 background: '#7CA992',
                 color: '#191C1A',
@@ -589,13 +719,11 @@ export default function Dashboard() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s',
                 whiteSpace: 'nowrap'
               }}
             >
-              <span>Resume Lesson</span>
-              <span>➔</span>
+              <span>{resumeInfo.doneInMod === 0 ? 'Start Lesson' : 'Resume Lesson'}</span>
+              <span aria-hidden="true">→</span>
             </Link>
 
             <Link
@@ -606,189 +734,120 @@ export default function Dashboard() {
                 borderRadius: '14px',
                 background: 'rgba(255, 255, 255, 0.05)',
                 border: '1px solid rgba(255, 255, 255, 0.08)',
-                color: '#9CAEA4',
+                color: '#B5C5BC',
                 fontSize: '13.5px',
                 fontWeight: '700',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.2s',
                 whiteSpace: 'nowrap'
               }}
             >
-              <span>All Courses</span>
+              All Courses
             </Link>
           </div>
         </div>
 
-        {/* =========================================================================
-            2. SPACIOUS 4-COLUMN SAGE KPI CARDS
-        ========================================================================= */}
+        {/* 2. 4-COLUMN REAL KPI CARDS */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '22px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: '20px',
             marginBottom: '36px'
           }}
         >
-          {/* Card 1: Accuracy */}
-          <div
-            style={{
-              background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '20px',
-              padding: '24px',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.18)'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#7CA992', textTransform: 'uppercase' }}>
-                Overall Accuracy
+          <div style={{ background: '#242A27', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#A3CBB7', textTransform: 'uppercase' }}>
+                Quiz Accuracy
               </span>
-              <span style={{ fontSize: '20px' }}>🎯</span>
+              <span aria-hidden="true" style={{ fontSize: '20px' }}>🎯</span>
             </div>
-            <div style={{ fontSize: '38px', fontWeight: '900', color: '#E4EAE6', letterSpacing: '-1px' }}>
-              {stats.quizAccuracy}%
+            <div style={{ fontSize: '36px', fontWeight: '900', color: '#E4EAE6' }}>
+              {stats.quizAccuracy !== null ? `${stats.quizAccuracy}%` : '—'}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
-              <div style={{ flex: 1, height: '5px', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: `${stats.quizAccuracy}%`, height: '100%', background: '#7CA992', borderRadius: '4px' }} />
-              </div>
-              <span style={{ fontSize: '12px', color: '#7CA992', fontWeight: '700' }}>+4.2%</span>
+            <div style={{ fontSize: '12.5px', color: '#9CAEA4', marginTop: '10px' }}>
+              {stats.totalQuizzes > 0
+                ? `Computed across ${stats.totalQuizzes} completed quiz${stats.totalQuizzes === 1 ? '' : 'zes'}`
+                : 'No quiz sessions recorded yet'}
             </div>
           </div>
 
-          {/* Card 2: Total Gestures Mastered */}
-          <div
-            style={{
-              background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '20px',
-              padding: '24px',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.18)'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#7CA992', textTransform: 'uppercase' }}>
-                Gestures Practiced
+          <div style={{ background: '#242A27', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#A3CBB7', textTransform: 'uppercase' }}>
+                Flashcards Practiced
               </span>
-              <span style={{ fontSize: '20px' }}>🤟</span>
+              <span aria-hidden="true" style={{ fontSize: '20px' }}>🤟</span>
             </div>
-            <div style={{ fontSize: '38px', fontWeight: '900', color: '#E4EAE6', letterSpacing: '-1px' }}>
-              {stats.practiceCount} <span style={{ fontSize: '18px', fontWeight: '600', color: '#9CAEA4' }}>signs</span>
+            <div style={{ fontSize: '36px', fontWeight: '900', color: '#E4EAE6' }}>
+              {stats.practiceCount} <span style={{ fontSize: '17px', fontWeight: '600', color: '#9CAEA4' }}>signs</span>
             </div>
-            <div style={{ fontSize: '12.5px', color: '#9CAEA4', marginTop: '12px' }}>
-              Across 3D avatar & camera drills
+            <div style={{ fontSize: '12.5px', color: '#9CAEA4', marginTop: '10px' }}>
+              {stats.practiceHistory.length} practice session{stats.practiceHistory.length === 1 ? '' : 's'} • {stats.translationsCount} translations run
             </div>
           </div>
 
-          {/* Card 3: Active Streak */}
-          <div
-            style={{
-              background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '20px',
-              padding: '24px',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.18)'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#7CA992', textTransform: 'uppercase' }}>
-                Rhythm & Streak
+          <div style={{ background: '#242A27', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#A3CBB7', textTransform: 'uppercase' }}>
+                Active Streak
               </span>
-              <span style={{ fontSize: '20px' }}>🔥</span>
+              <span aria-hidden="true" style={{ fontSize: '20px' }}>🔥</span>
             </div>
-            <div style={{ fontSize: '38px', fontWeight: '900', color: '#E4EAE6', letterSpacing: '-1px' }}>
-              {stats.streak} <span style={{ fontSize: '18px', fontWeight: '600', color: '#9CAEA4' }}>Days</span>
+            <div style={{ fontSize: '36px', fontWeight: '900', color: '#E4EAE6' }}>
+              {stats.streak} <span style={{ fontSize: '17px', fontWeight: '600', color: '#9CAEA4' }}>Days</span>
             </div>
-            <div style={{ fontSize: '12.5px', color: '#7CA992', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7CA992' }} />
-              <span>Streak safe for today • Keep it up!</span>
+            <div style={{ fontSize: '12.5px', color: '#9CAEA4', marginTop: '10px' }}>
+              {stats.streak > 0 ? 'Consecutive daily study streak' : 'Complete a lesson, drill, or quiz to start your streak'}
             </div>
           </div>
 
-          {/* Card 4: Total Competitive XP & Standing */}
-          <div
-            style={{
-              background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '20px',
-              padding: '24px',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.18)'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#7CA992', textTransform: 'uppercase' }}>
-                Competitive XP
+          <div style={{ background: '#242A27', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', color: '#A3CBB7', textTransform: 'uppercase' }}>
+                Earned XP
               </span>
-              <span style={{ fontSize: '20px' }}>💎</span>
+              <span aria-hidden="true" style={{ fontSize: '20px' }}>💎</span>
             </div>
-            <div style={{ fontSize: '38px', fontWeight: '900', color: '#E4EAE6', letterSpacing: '-1px' }}>
-              {stats.totalXP} <span style={{ fontSize: '18px', fontWeight: '600', color: '#7CA992' }}>XP</span>
+            <div style={{ fontSize: '36px', fontWeight: '900', color: '#E4EAE6' }}>
+              {stats.totalXP} <span style={{ fontSize: '17px', fontWeight: '600', color: '#7CA992' }}>XP</span>
             </div>
-            <div style={{ fontSize: '12.5px', color: '#9CAEA4', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ color: '#7CA992', fontWeight: '700' }}>Rank #4 Global</span>
-              <span>•</span>
-              <span>Fuels Leaderboard ONLY</span>
+            <div style={{ fontSize: '12.5px', color: '#9CAEA4', marginTop: '10px' }}>
+              {stats.completedCount} lesson{stats.completedCount === 1 ? '' : 's'} completed • Earned from real activity
             </div>
           </div>
         </div>
 
-        {/* =========================================================================
-            3. RANK PROGRESSION SYSTEM (PROGRESS RING) & GLOBAL LEADERBOARD
-        ========================================================================= */}
+        {/* 3. RANK PROGRESSION & REAL ACTIVITY LOG */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
             gap: '24px',
             marginBottom: '36px'
           }}
         >
-          {/* Left: Rank Progression System with Circular Gauge */}
+          {/* Rank Progression Ring */}
           <div
             style={{
               background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '24px',
               padding: '28px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.18)',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-between',
-              position: 'relative',
-              overflow: 'hidden'
+              justifyContent: 'space-between'
             }}
           >
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6', letterSpacing: '-0.3px' }}>
-                  Rank Progression
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6' }}>
+                  XP Rank Progression
                 </h3>
                 <span
                   style={{
                     fontSize: '11px',
                     fontWeight: '800',
-                    color: '#7CA992',
+                    color: '#A3CBB7',
                     background: 'rgba(124, 169, 146, 0.14)',
                     padding: '3px 8px',
                     borderRadius: '8px',
@@ -799,24 +858,13 @@ export default function Dashboard() {
                 </span>
               </div>
               <p style={{ margin: '0 0 22px 0', fontSize: '13.5px', color: '#9CAEA4' }}>
-                XP points exclusively govern your official tier rank. Every sign verified climbs your standing.
+                Earn +15 XP per correct quiz answer, +5 XP per practiced sign, and full lesson XP in courses.
               </p>
 
-              {/* Progress Ring & Current Standing Details */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '24px' }}>
-                {/* Circular SVG Gauge */}
-                <div style={{ position: 'relative', width: '130px', height: '130px', flexShrink: 0 }}>
-                  <svg width="130" height="130" viewBox="0 0 130 130" style={{ transform: 'rotate(-90deg)' }}>
-                    {/* Background Ring Track */}
-                    <circle
-                      cx="65"
-                      cy="65"
-                      r="52"
-                      fill="transparent"
-                      stroke="rgba(255, 255, 255, 0.06)"
-                      strokeWidth="10"
-                    />
-                    {/* Animated Progress Ring */}
+                <div style={{ position: 'relative', width: '126px', height: '126px', flexShrink: 0 }}>
+                  <svg width="126" height="126" viewBox="0 0 130 130" style={{ transform: 'rotate(-90deg)' }}>
+                    <circle cx="65" cy="65" r="52" fill="transparent" stroke="rgba(255, 255, 255, 0.06)" strokeWidth="10" />
                     <circle
                       cx="65"
                       cy="65"
@@ -827,7 +875,6 @@ export default function Dashboard() {
                       strokeDasharray="326.72"
                       strokeDashoffset={326.72 - (rankData.percent / 100) * 326.72}
                       strokeLinecap="round"
-                      style={{ transition: 'stroke-dashoffset 0.8s ease' }}
                     />
                   </svg>
                   <div
@@ -837,41 +884,36 @@ export default function Dashboard() {
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      textAlign: 'center'
+                      justifyContent: 'center'
                     }}
                   >
-                    <span style={{ fontSize: '26px' }}>{rankData.icon}</span>
-                    <span style={{ fontSize: '15px', fontWeight: '900', color: '#E4EAE6', letterSpacing: '-0.5px' }}>
-                      {rankData.percent}%
-                    </span>
+                    <span aria-hidden="true" style={{ fontSize: '24px' }}>{rankData.icon}</span>
+                    <span style={{ fontSize: '14px', fontWeight: '900', color: '#E4EAE6' }}>{rankData.percent}%</span>
                   </div>
                 </div>
 
-                {/* Rank Standing Details */}
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#7CA992', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#7CA992', textTransform: 'uppercase' }}>
                     Current Standing
                   </div>
-                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#E4EAE6', letterSpacing: '-0.5px', marginTop: '2px' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#E4EAE6', marginTop: '2px' }}>
                     {rankData.rank}
                   </div>
                   <div style={{ fontSize: '13px', color: '#9CAEA4', marginTop: '6px' }}>
                     XP: <strong style={{ color: '#E4EAE6' }}>{stats.totalXP}</strong> / {rankData.tierMax}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#7CA992', marginTop: '4px', fontWeight: '600' }}>
+                  <div style={{ fontSize: '12px', color: '#A3CBB7', marginTop: '4px', fontWeight: '600' }}>
                     {rankData.remaining > 0 ? (
-                      <span>+<strong>{rankData.remaining} XP</strong> to reach {rankData.nextRank}</span>
+                      <span>+{rankData.remaining} XP to reach {rankData.nextRank}</span>
                     ) : (
-                      <span>Highest Tier Attained! 👑</span>
+                      <span>Highest Tier Attained</span>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* 5-Step Tier Roadmap */}
               <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginTop: '10px' }}>
-                <div style={{ position: 'absolute', top: '14px', left: '10px', right: '10px', height: '2px', background: 'rgba(255, 255, 255, 0.08)', zIndex: 0 }} />
+                <div style={{ position: 'absolute', top: '14px', left: '10px', right: '10px', height: '2px', background: 'rgba(255, 255, 255, 0.08)' }} />
                 {[
                   { name: 'Novice', min: '0 XP', icon: '🌱', active: stats.totalXP >= 0 },
                   { name: 'Apprentice', min: '500', icon: '🌿', active: stats.totalXP >= 500 },
@@ -896,235 +938,169 @@ export default function Dashboard() {
                     >
                       {tier.icon}
                     </div>
-                    <span style={{ fontSize: '10.5px', fontWeight: tier.active ? '800' : '500', color: tier.active ? '#E4EAE6' : '#9CAEA4' }}>
-                      {tier.name}
-                    </span>
-                    <span style={{ fontSize: '9.5px', color: '#9CAEA4' }}>{tier.min}</span>
+                    <span style={{ fontSize: '10.5px', fontWeight: '700', color: tier.active ? '#E4EAE6' : '#9CAEA4' }}>{tier.name}</span>
+                    <span style={{ fontSize: '9.5px', color: '#85968C' }}>{tier.min}</span>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* Competitive Guarantee Note */}
-            <div style={{ marginTop: '22px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-              <div style={{ fontSize: '12px', color: '#9CAEA4', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🔒</span>
-                <span>
-                  <strong style={{ color: '#7CA992' }}>Competitive Integrity:</strong> XP points strictly determine rank promotions and leaderboard tiers. No gimmick deductions.
-                </span>
-              </div>
-            </div>
           </div>
 
-          {/* Right: Global Competitive Leaderboard */}
+          {/* Right: Genuine Recorded Session Log */}
           <div
             style={{
               background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '24px',
               padding: '28px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.18)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
             }}
           >
             <div>
-              {/* Header & Tabs */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6', letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>🏆</span>
-                    <span>Global Competitive Leaderboard</span>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6' }}>
+                    Recent Session Log
                   </h3>
                   <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#9CAEA4' }}>
-                    Ranked by verified XP output • Top 3 signers promote weekly
+                    Your verified quiz and practice runs stored locally
                   </p>
                 </div>
 
-                {/* Filter Tabs */}
-                <div role="tablist" aria-label="Leaderboard timeframe" style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '3px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={leaderboardTab === 'weekly'}
-                    onClick={() => setLeaderboardTab('weekly')}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: '8px',
-                      background: leaderboardTab === 'weekly' ? '#7CA992' : 'transparent',
-                      color: leaderboardTab === 'weekly' ? '#191C1A' : '#B5C5BC',
-                      fontWeight: '800',
-                      border: 'none',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    Weekly Cup
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={leaderboardTab === 'alltime'}
-                    onClick={() => setLeaderboardTab('alltime')}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: '8px',
-                      background: leaderboardTab === 'alltime' ? '#7CA992' : 'transparent',
-                      color: leaderboardTab === 'alltime' ? '#191C1A' : '#B5C5BC',
-                      fontWeight: '800',
-                      border: 'none',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    All-Time Hall
-                  </button>
+                <div role="tablist" aria-label="Filter recorded activity" style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '3px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'quiz', label: 'Quizzes' },
+                    { id: 'practice', label: 'Practice' }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activityTab === t.id}
+                      onClick={() => setActivityTab(t.id)}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: '8px',
+                        background: activityTab === t.id ? '#7CA992' : 'transparent',
+                        color: activityTab === t.id ? '#191C1A' : '#B5C5BC',
+                        fontWeight: '800',
+                        border: 'none',
+                        fontSize: '11.5px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Promotion Zone Banner */}
-              <div
-                style={{
-                  background: 'rgba(124, 169, 146, 0.12)',
-                  border: '1px solid rgba(124, 169, 146, 0.25)',
-                  borderRadius: '12px',
-                  padding: '8px 14px',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '12px'
-                }}
-              >
-                <span style={{ color: '#7CA992', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>⚡</span>
-                  <span>Promotion Zone: Top 3 advance to Diamond League</span>
-                </span>
-                <span style={{ color: '#9CAEA4', fontWeight: '600' }}>
-                  Resets in 2d 14h
-                </span>
-              </div>
-
-              {/* Leaderboard Table / Rows */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(leaderboardTab === 'weekly' ? weeklyLeaderboard : alltimeLeaderboard).map((row) => (
-                  <div
-                    key={row.rank}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: row.isUser ? '10px 16px' : '9px 14px',
-                      borderRadius: '14px',
-                      background: row.isUser ? 'rgba(124, 169, 146, 0.16)' : 'rgba(255, 255, 255, 0.02)',
-                      border: row.isUser ? '1.5px solid rgba(124, 169, 146, 0.4)' : '1px solid rgba(255, 255, 255, 0.05)',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    {/* Rank & User Info */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div
-                        style={{
-                          width: '26px',
-                          textAlign: 'center',
-                          fontSize: row.rank <= 3 ? '16px' : '12px',
-                          fontWeight: '800',
-                          color: row.rank === 1 ? '#d4a373' : row.rank === 2 ? '#cbd5e1' : row.rank === 3 ? '#a8a29e' : '#9CAEA4'
-                        }}
-                      >
-                        {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
-                      </div>
-
-                      <span style={{ fontSize: '18px' }}>{row.avatar}</span>
-
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '13.5px', fontWeight: row.isUser ? '800' : '700', color: row.isUser ? '#7CA992' : '#E4EAE6' }}>
-                            {row.name}
-                          </span>
-                          <span style={{ fontSize: '12px' }}>{row.flag}</span>
-                          {row.isUser && (
-                            <span
-                              style={{
-                                fontSize: '9.5px',
-                                fontWeight: '900',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                background: '#7CA992',
-                                color: '#191C1A',
-                                textTransform: 'uppercase'
-                              }}
-                            >
-                              YOU
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#9CAEA4' }}>
-                          {row.tier} • {row.streak}d streak 🔥
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* XP Score */}
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '15px', fontWeight: '900', color: row.isUser ? '#7CA992' : '#E4EAE6', letterSpacing: '-0.3px' }}>
-                        {row.xp.toLocaleString()} <span style={{ fontSize: '11px', fontWeight: '700', color: '#9CAEA4' }}>XP</span>
-                      </div>
-                    </div>
+              {mergedActivities.length === 0 ? (
+                <div
+                  style={{
+                    padding: '28px 20px',
+                    borderRadius: '16px',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px dashed rgba(255, 255, 255, 0.12)',
+                    textAlign: 'center',
+                    marginTop: '10px'
+                  }}
+                >
+                  <p style={{ margin: '0 0 12px', fontSize: '13.5px', color: '#B5C5BC' }}>
+                    No {activityTab === 'all' ? 'quiz or practice' : activityTab} sessions recorded yet.
+                  </p>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <Link
+                      to="/quiz"
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '10px',
+                        background: '#7CA992',
+                        color: '#191C1A',
+                        textDecoration: 'none',
+                        fontSize: '12.5px',
+                        fontWeight: '800'
+                      }}
+                    >
+                      Take a Quiz
+                    </Link>
+                    <Link
+                      to="/practice"
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(255,255,255,0.06)',
+                        color: '#E4EAE6',
+                        textDecoration: 'none',
+                        fontSize: '12.5px',
+                        fontWeight: '700'
+                      }}
+                    >
+                      Open Practice
+                    </Link>
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {mergedActivities.slice(0, 6).map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        borderRadius: '12px',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid rgba(255, 255, 255, 0.06)'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '13.5px', fontWeight: '700', color: '#E4EAE6' }}>
+                          {item.label} • <span style={{ color: '#A3CBB7' }}>{item.detail}</span>
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#9CAEA4', marginTop: '2px' }}>{item.date}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#7CA992' }}>{item.pct}%</div>
+                        <div style={{ fontSize: '11px', color: '#9CAEA4' }}>+{item.xpEarned} XP</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Promotion Incentive Footer */}
             <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12.5px' }}>
               <span style={{ color: '#9CAEA4' }}>
-                Need <strong style={{ color: '#7CA992' }}>+440 XP</strong> to claim 3rd place podium.
+                Showing {Math.min(6, mergedActivities.length)} of {mergedActivities.length} recorded sessions
               </span>
-              <Link
-                to="/quiz"
-                style={{
-                  color: '#7CA992',
-                  fontWeight: '800',
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <span>Earn XP in Quiz</span>
-                <span>➔</span>
+              <Link to="/quiz" style={{ color: '#7CA992', fontWeight: '800', textDecoration: 'none' }}>
+                New Quiz →
               </Link>
             </div>
           </div>
         </div>
 
-        {/* =========================================================================
-            3. PERFORMANCE CHART (LEFT) & 7-DAY CONSISTENCY (RIGHT)
-        ========================================================================= */}
+        {/* 4. REAL ACCURACY TRAJECTORY & 7-DAY CONSISTENCY */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
             gap: '24px',
             marginBottom: '36px'
           }}
         >
-          {/* Left Chart: Accuracy Progression Curve */}
+          {/* Real Quiz Accuracy Trajectory */}
           <div
             style={{
               background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '24px',
               padding: '28px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.18)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -1132,105 +1108,104 @@ export default function Dashboard() {
           >
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6', letterSpacing: '-0.3px' }}>
-                  Accuracy Curve & Precision Trajectory
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6' }}>
+                  Quiz Precision Trajectory
                 </h3>
                 <span style={{ fontSize: '12px', color: '#7CA992', fontWeight: '700' }}>
-                  Last 7 Assessments
+                  Last {recentQuizzesForChart.length} Quiz{recentQuizzesForChart.length === 1 ? '' : 'zes'}
                 </span>
               </div>
-              <p style={{ margin: '0 0 24px 0', fontSize: '13.5px', color: '#9CAEA4' }}>
-                Visual trajectory of real-time sign recognition scores across flashcards and quizzes.
+              <p style={{ margin: '0 0 20px 0', fontSize: '13.5px', color: '#9CAEA4' }}>
+                Plotted directly from your recorded quiz scores over time.
               </p>
             </div>
 
-            {/* SVG Interactive Smooth Line Graph */}
-            <div style={{ width: '100%', height: '180px', position: 'relative' }}>
-              <svg viewBox="0 0 500 160" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                <defs>
-                  <linearGradient id="sageGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7CA992" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#7CA992" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-
-                {/* Grid guidelines */}
-                <line x1="0" y1="40" x2="500" y2="40" stroke="rgba(255,255,255,0.05)" strokeDasharray="4 4" />
-                <line x1="0" y1="80" x2="500" y2="80" stroke="rgba(255,255,255,0.05)" strokeDasharray="4 4" />
-                <line x1="0" y1="120" x2="500" y2="120" stroke="rgba(255,255,255,0.05)" strokeDasharray="4 4" />
-
-                {/* Shaded Area */}
-                <path
-                  d="M 20 110 Q 90 90, 160 80 T 300 50 T 420 35 T 480 20 L 480 150 L 20 150 Z"
-                  fill="url(#sageGradient)"
-                />
-
-                {/* Smooth Curve Path */}
-                <path
-                  d="M 20 110 Q 90 90, 160 80 T 300 50 T 420 35 T 480 20"
-                  fill="none"
-                  stroke="#7CA992"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                />
-
-                {/* Data Points */}
-                {[
-                  { cx: 20, cy: 110, val: '72%' },
-                  { cx: 100, cy: 92, val: '78%' },
-                  { cx: 180, cy: 80, val: '82%' },
-                  { cx: 260, cy: 65, val: '85%' },
-                  { cx: 340, cy: 50, val: '89%' },
-                  { cx: 420, cy: 35, val: '91%' },
-                  { cx: 480, cy: 20, val: `${stats.quizAccuracy}%` }
-                ].map((pt, i) => (
-                  <g key={i}>
-                    <circle
-                      cx={pt.cx}
-                      cy={pt.cy}
-                      r={hoveredPoint?.cx === pt.cx ? '7' : '5'}
-                      fill="#191C1A"
-                      stroke="#7CA992"
-                      strokeWidth="2.5"
-                      style={{ cursor: 'pointer', transition: 'r 0.2s' }}
-                      onMouseEnter={() => setHoveredPoint(pt)}
-                      onMouseLeave={() => setHoveredPoint(null)}
-                    />
-                    <text
-                      x={pt.cx}
-                      y={pt.cy - 10}
-                      fill="#9CAEA4"
-                      fontSize="10"
-                      fontWeight="700"
-                      textAnchor="middle"
-                    >
-                      {pt.val}
-                    </text>
-                  </g>
-                ))}
-              </svg>
-
-              {/* X-axis labels */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '11.5px', color: '#9CAEA4' }}>
-                <span>Start</span>
-                <span>Module 1</span>
-                <span>Module 2</span>
-                <span>Module 3</span>
-                <span>Current Peak</span>
+            {recentQuizzesForChart.length === 0 ? (
+              <div
+                style={{
+                  height: '160px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '14px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px dashed rgba(255, 255, 255, 0.1)',
+                  color: '#9CAEA4',
+                  fontSize: '13px',
+                  textAlign: 'center',
+                  padding: '16px'
+                }}
+              >
+                <p style={{ margin: '0 0 10px' }}>Complete at least 1 quiz to chart your accuracy trajectory.</p>
+                <Link to="/quiz" style={{ color: '#7CA992', fontWeight: '800', textDecoration: 'none' }}>
+                  Start First Quiz →
+                </Link>
               </div>
-            </div>
+            ) : (
+              <div style={{ width: '100%', height: '180px', position: 'relative' }}>
+                {(() => {
+                  const pts = recentQuizzesForChart.map((item, idx) => {
+                    const denom = Math.max(1, recentQuizzesForChart.length - 1);
+                    const cx = recentQuizzesForChart.length === 1 ? 250 : 30 + (idx / denom) * 440;
+                    const cy = 135 - (item.pct / 100) * 110;
+                    return { cx, cy, val: `${item.pct}%`, label: item.label };
+                  });
+                  const polylineStr = pts.map((p) => `${p.cx},${p.cy}`).join(' ');
+                  return (
+                    <>
+                      <svg viewBox="0 0 500 160" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                        <line x1="0" y1="25" x2="500" y2="25" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
+                        <line x1="0" y1="80" x2="500" y2="80" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
+                        <line x1="0" y1="135" x2="500" y2="135" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
+                        {pts.length > 1 && (
+                          <polyline
+                            fill="none"
+                            stroke="#7CA992"
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            points={polylineStr}
+                          />
+                        )}
+                        {pts.map((pt, i) => (
+                          <g key={i}>
+                            <circle
+                              cx={pt.cx}
+                              cy={pt.cy}
+                              r={hoveredPoint?.cx === pt.cx ? '7' : '5'}
+                              fill="#191C1A"
+                              stroke="#7CA992"
+                              strokeWidth="2.5"
+                              style={{ cursor: 'pointer' }}
+                              onMouseEnter={() => setHoveredPoint(pt)}
+                              onMouseLeave={() => setHoveredPoint(null)}
+                            />
+                            <text x={pt.cx} y={pt.cy - 12} fill="#B5C5BC" fontSize="11" fontWeight="700" textAnchor="middle">
+                              {pt.val}
+                            </text>
+                          </g>
+                        ))}
+                      </svg>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '11.5px', color: '#9CAEA4' }}>
+                        {recentQuizzesForChart.map((q, idx) => (
+                          <span key={idx}>{q.label}</span>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
-          {/* Right Chart: 7-Day Consistency Rhythm */}
+          {/* 7-Day Real Activity Volume */}
           <div
             style={{
               background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '24px',
               padding: '28px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.18)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -1238,48 +1213,37 @@ export default function Dashboard() {
           >
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6', letterSpacing: '-0.3px' }}>
-                  Weekly Practice Volume
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6' }}>
+                  7-Day Practice Volume
                 </h3>
                 <span
                   style={{
                     fontSize: '11px',
                     fontWeight: '800',
-                    color: '#7CA992',
+                    color: '#A3CBB7',
                     background: 'rgba(124, 169, 146, 0.14)',
                     padding: '3px 8px',
                     borderRadius: '8px'
                   }}
                 >
-                  237 SIGNS THIS WEEK
+                  {weeklyTotal} SIGNS THIS WEEK
                 </span>
               </div>
               <p style={{ margin: '0 0 24px 0', fontSize: '13.5px', color: '#9CAEA4' }}>
-                Daily signing output across all modules and webcam drills.
+                Daily quiz &amp; practice sign count logged over the last 7 days.
               </p>
             </div>
 
-            {/* Weekly Minimalist Bar Chart */}
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '160px', padding: '10px 0' }}>
               {weeklyData.map((d, idx) => {
-                const max = 60;
-                const heightPercent = Math.min(100, Math.round((d.count / max) * 100));
+                const max = Math.max(10, ...weeklyData.map((item) => item.count));
+                const heightPercent = d.count === 0 ? 4 : Math.min(100, Math.round((d.count / max) * 100));
 
                 return (
-                  <div
-                    key={idx}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '8px',
-                      flex: 1
-                    }}
-                  >
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
                     <span style={{ fontSize: '11px', fontWeight: '700', color: d.today ? '#7CA992' : '#9CAEA4' }}>
                       {d.count}
                     </span>
-
                     <div
                       style={{
                         width: '28px',
@@ -1295,22 +1259,13 @@ export default function Dashboard() {
                         style={{
                           width: '100%',
                           height: `${heightPercent}%`,
-                          background: d.today
-                            ? '#7CA992'
-                            : 'rgba(124, 169, 146, 0.38)',
+                          background: d.count === 0 ? 'rgba(255,255,255,0.08)' : d.today ? '#7CA992' : 'rgba(124, 169, 146, 0.45)',
                           borderRadius: '6px 6px 4px 4px',
                           transition: 'height 0.4s ease'
                         }}
                       />
                     </div>
-
-                    <span
-                      style={{
-                        fontSize: '12px',
-                        fontWeight: d.today ? '800' : '600',
-                        color: d.today ? '#7CA992' : '#9CAEA4'
-                      }}
-                    >
+                    <span style={{ fontSize: '12px', fontWeight: d.today ? '800' : '600', color: d.today ? '#7CA992' : '#9CAEA4' }}>
                       {d.day}
                     </span>
                   </div>
@@ -1320,71 +1275,43 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* =========================================================================
-            4. DOMAIN COMPETENCY & TROPHY SHELF
-        ========================================================================= */}
+        {/* 5. CURRICULUM PROGRESS & EARNED MILESTONES */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
             gap: '24px'
           }}
         >
-          {/* Domain Breakdown */}
-          <div
-            style={{
-              background: '#242A27',
-              backdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '24px',
-              padding: '28px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.18)'
-            }}
-          >
+          <div style={{ background: '#242A27', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '24px', padding: '28px' }}>
             <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: '800', color: '#E4EAE6' }}>
-              Vocabulary Domain Competency
+              Curriculum Completion Breakdown
             </h3>
             <p style={{ margin: '0 0 20px 0', fontSize: '13.5px', color: '#9CAEA4' }}>
-              Mastery scores calculated from real-time gesture recall speed.
+              Tracked across completed lessons and verified quiz sessions.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {[
-                { domain: 'Fingerspelling Alphabets (A-Z)', percent: 98, level: 'Flawless' },
-                { domain: 'Everyday Greetings & Introductions', percent: 94, level: 'Fluent' },
-                { domain: 'Camera Static Signs (Yes, Stop, One, Rock, Victory)', percent: 92, level: 'Certified' },
-                { domain: 'Food, Dining & Grocery Essentials', percent: 84, level: 'Advanced' },
-                { domain: 'Emergency, Healthcare & Safety', percent: 88, level: 'Advanced' }
-              ].map((item, idx) => (
+              {progressDomains.map((item, idx) => (
                 <div key={idx}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13.5px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13.5px', gap: '10px' }}>
                     <span style={{ fontWeight: '600', color: '#E4EAE6' }}>{item.domain}</span>
-                    <span style={{ fontWeight: '800', color: '#7CA992' }}>{item.percent}%</span>
+                    <span style={{ fontWeight: '800', color: '#A3CBB7', whiteSpace: 'nowrap' }}>{item.summary}</span>
                   </div>
                   <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        width: `${item.percent}%`,
-                        height: '100%',
-                        background: '#7CA992',
-                        borderRadius: '4px'
-                      }}
-                    />
+                    <div style={{ width: `${item.percent}%`, height: '100%', background: '#7CA992', borderRadius: '4px' }} />
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Trophy Shelf & Milestones */}
           <div
             style={{
               background: '#242A27',
-              backdropFilter: 'blur(16px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '24px',
               padding: '28px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.18)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -1393,46 +1320,55 @@ export default function Dashboard() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#E4EAE6' }}>
-                  Milestone Badges & Honors
+                  Milestone Badges &amp; Honors
                 </h3>
-                <span style={{ fontSize: '12px', color: '#7CA992', fontWeight: '700' }}>4 / 4 Unlocked</span>
+                <span style={{ fontSize: '12px', color: '#7CA992', fontWeight: '700' }}>
+                  {unlockedMilestoneCount} / {milestones.length} Unlocked
+                </span>
               </div>
               <p style={{ margin: '0 0 20px 0', fontSize: '13.5px', color: '#9CAEA4' }}>
-                Recognized achievements awarded for accuracy and streak milestones.
+                Earned automatically as you complete lessons, quizzes, and study streaks.
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                {[
-                  { icon: '💎', title: 'Sage Elite', desc: 'Maintained 90%+ Accuracy' },
-                  { icon: '🔥', title: '7-Day Champion', desc: 'Zero Days Missed This Week' },
-                  { icon: '📷', title: 'Vision Pioneer', desc: '5 Signs MediaPipe Mastered' },
-                  { icon: '⚡', title: 'Velocity Signer', desc: 'Sub-2s Recognition Speed' }
-                ].map((badge, idx) => (
+                {milestones.map((badge, idx) => (
                   <div
                     key={idx}
                     style={{
                       padding: '16px',
                       borderRadius: '16px',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      background: badge.unlocked ? 'rgba(124, 169, 146, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                      border: badge.unlocked ? '1px solid rgba(124, 169, 146, 0.35)' : '1px solid rgba(255, 255, 255, 0.06)',
+                      opacity: badge.unlocked ? 1 : 0.65,
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '4px'
                     }}
                   >
-                    <span style={{ fontSize: '24px' }}>{badge.icon}</span>
-                    <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#E4EAE6', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span aria-hidden="true" style={{ fontSize: '22px' }}>{badge.icon}</span>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          color: badge.unlocked ? '#191C1A' : '#9CAEA4',
+                          background: badge.unlocked ? '#7CA992' : 'rgba(255,255,255,0.06)',
+                          padding: '2px 7px',
+                          borderRadius: '6px'
+                        }}
+                      >
+                        {badge.unlocked ? 'Unlocked' : 'Locked'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#E4EAE6', marginTop: '6px' }}>
                       {badge.title}
                     </div>
-                    <div style={{ fontSize: '11.5px', color: '#9CAEA4' }}>
-                      {badge.desc}
-                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#9CAEA4' }}>{badge.desc}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Quick Practice Shortcut */}
             <div style={{ marginTop: '24px', paddingTop: '18px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
               <Link
                 to="/quiz"
@@ -1444,19 +1380,18 @@ export default function Dashboard() {
                   borderRadius: '14px',
                   background: 'rgba(124, 169, 146, 0.14)',
                   border: '1px solid rgba(124, 169, 146, 0.28)',
-                  color: '#7CA992',
+                  color: '#A3CBB7',
                   textDecoration: 'none',
                   fontSize: '13.5px',
                   fontWeight: '700'
                 }}
               >
-                <span>Take Daily Skill Verification Quiz</span>
-                <span>➔</span>
+                <span>Take Skill Verification Quiz</span>
+                <span aria-hidden="true">→</span>
               </Link>
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

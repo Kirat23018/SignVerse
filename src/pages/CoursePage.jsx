@@ -10,6 +10,7 @@ const STORAGE_ACTIVE_LESSON = 'signverse_active_lesson_index';
 export default function CoursePage() {
   const [activeLevel, setActiveLevel] = useState(null);
   const [currentLessonIndex, setCurrentLessonIndex] = useState(0);
+  const [completionBanner, setCompletionBanner] = useState('');
 
   // 1. Initialization: Restore active level & lesson index from localStorage on mount
   useEffect(() => {
@@ -63,15 +64,14 @@ export default function CoursePage() {
     localStorage.removeItem(STORAGE_ACTIVE_LESSON);
   };
 
-  // 3. Next Lesson Handler with completion alert and persistence cleanup
+  // 3. Next Lesson Handler with accessible completion banner
   const handleNextLesson = () => {
     if (!activeLevel) return;
 
     if (currentLessonIndex + 1 < activeLevel.lessons.length) {
       setCurrentLessonIndex((prev) => prev + 1);
     } else {
-      // Completed last lesson of level
-      alert(`🎉 Outstanding! You completed all lessons in ${activeLevel.title}! Returning to the Roadmap.`);
+      setCompletionBanner(`Completed all lessons in ${activeLevel.title}!`);
       localStorage.removeItem(STORAGE_ACTIVE_LEVEL);
       localStorage.removeItem(STORAGE_ACTIVE_LESSON);
       setCurrentLessonIndex(0);
@@ -83,10 +83,39 @@ export default function CoursePage() {
     <div
       style={{
         minHeight: 'calc(100vh - 65px)',
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#191C1A',
+        color: '#E4EAE6',
         transition: 'all 0.3s ease-in-out'
       }}
     >
+      {completionBanner && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            maxWidth: '1200px',
+            margin: '0 auto 12px',
+            padding: '12px 18px',
+            backgroundColor: 'rgba(124,169,146,0.16)',
+            border: '1px solid #7CA992',
+            borderRadius: '12px',
+            color: '#A3CBB7',
+            fontWeight: '700',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+          <span>{completionBanner}</span>
+          <button
+            type="button"
+            onClick={() => setCompletionBanner('')}
+            style={{ background: 'transparent', border: 'none', color: '#E4EAE6', cursor: 'pointer', fontWeight: '800' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <style>{`
         @keyframes courseFadeIn {
           from {
@@ -121,43 +150,41 @@ export default function CoursePage() {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '12px 18px',
-              backgroundColor: '#ffffff',
+              backgroundColor: '#242A27',
               borderRadius: '16px',
               marginBottom: '10px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-              border: '1px solid #e2e8f0',
+              border: '1px solid #3A443F',
               flexWrap: 'wrap',
               gap: '10px'
             }}
           >
             <button
+              type="button"
               onClick={handleBackToRoadmap}
               style={{
-                backgroundColor: '#f1f5f9',
-                border: '1px solid #cbd5e1',
+                backgroundColor: '#191C1A',
+                border: '1px solid #3A443F',
                 padding: '8px 18px',
                 borderRadius: '12px',
                 fontSize: '14px',
                 fontWeight: '700',
-                color: '#1e293b',
+                color: '#E4EAE6',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                transition: 'background 0.2s'
+                gap: '8px'
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#e2e8f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
             >
-              <span>←</span>
+              <span aria-hidden="true">←</span>
               <span>Back to Roadmap</span>
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span
                 style={{
-                  backgroundColor: activeLevel.color || '#10b981',
-                  color: '#ffffff',
+                  backgroundColor: 'rgba(124,169,146,0.18)',
+                  color: '#A3CBB7',
+                  border: '1px solid rgba(124,169,146,0.35)',
                   fontSize: '11px',
                   fontWeight: '800',
                   padding: '3px 10px',
@@ -167,7 +194,7 @@ export default function CoursePage() {
               >
                 {activeLevel.badge || 'Level Active'}
               </span>
-              <span style={{ fontSize: '15px', fontWeight: '800', color: '#0f172a' }}>
+              <span style={{ fontSize: '15px', fontWeight: '800', color: '#E4EAE6' }}>
                 {activeLevel.title}
               </span>
             </div>

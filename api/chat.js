@@ -21,6 +21,46 @@ const ALLOWED_ROUTE_REGEX = /^\/[a-zA-Z0-9\-_/?=&%]*$/;
 const MAX_QUERY_LENGTH = 2000;
 const MAX_HISTORY_ITEMS = 10;
 
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 20;
+const rateLimitStore = new Map();
+
+export function resetRateLimiter() {
+  rateLimitStore.clear();
+}
+
+export function getClientIp(req) {
+  const forwarded = req?.headers?.['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  const realIp = req?.headers?.['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return realIp.trim();
+  }
+  return req?.socket?.remoteAddress || 'unknown';
+}
+
+export function checkRateLimit(ip, now = Date.now()) {
+  const key = ip || 'unknown';
+  const timestamps = (rateLimitStore.get(key) || []).filter(
+    (ts) => now - ts < RATE_LIMIT_WINDOW_MS
+  );
+  if (timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    const oldest = timestamps[0];
+    const retryAfterSec = Math.max(1, Math.ceil((RATE_LIMIT_WINDOW_MS - (now - oldest)) / 1000));
+    rateLimitStore.set(key, timestamps);
+    return { allowed: false, remaining: 0, retryAfterSec };
+  }
+  timestamps.push(now);
+  rateLimitStore.set(key, timestamps);
+  return {
+    allowed: true,
+    remaining: Math.max(0, RATE_LIMIT_MAX_REQUESTS - timestamps.length),
+    retryAfterSec: 0
+  };
+}
+
 export function isSafeInternalRoute(route) {
   if (typeof route !== 'string') return false;
   const trimmed = route.trim();
@@ -150,7 +190,7 @@ async function queryGemini(query, history, apiKey) {
       }
     ];
 
-    const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+    const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -184,6 +224,16 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed.' });
+  }
+
+  const rate = checkRateLimit(getClientIp(req));
+  res.setHeader('X-RateLimit-Remaining', String(rate.remaining));
+  if (!rate.allowed) {
+    res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({
+      error: `Too many requests. Please wait ${rate.retryAfterSec}s before trying again.`,
+      retryAfterSec: rate.retryAfterSec
+    });
   }
 
   const parsed = validateChatPayload(req.body);

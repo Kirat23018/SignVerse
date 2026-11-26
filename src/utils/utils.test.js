@@ -28,6 +28,11 @@ import {
   resetFreeTrial
 } from './subscriptionManager';
 import { updateStreak, getStreak } from './streakManager';
+import {
+  buildIslGlossSequence,
+  translateEnglishToISL,
+  ISL_LINGUISTIC_DISCLAIMER
+} from './islTranslator';
 
 describe('aiBotEngine', () => {
   beforeEach(() => {
@@ -241,6 +246,33 @@ describe('subscriptionManager & streakManager', () => {
     const oldDate = new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0];
     localStorage.setItem('lastStreakDate', oldDate);
     expect(updateStreak()).toBe(1);
+  });
+});
+
+describe('islTranslator (English-to-ISL Linguistic Approximation)', () => {
+  it('omits English copulas/articles, places time markers first, and keeps WH-words/negation clause-final', () => {
+    const seq1 = buildIslGlossSequence('I am going to the market today');
+    expect(seq1.map((t) => t.gloss)).toEqual(['TODAY', 'I', 'MARKET', 'GOING']);
+
+    const seq2 = buildIslGlossSequence('What is your name?');
+    expect(seq2.map((t) => t.gloss)).toEqual(['NAME WHAT']);
+
+    const seqWh = buildIslGlossSequence('Where are you going?');
+    expect(seqWh.map((t) => t.gloss)).toEqual(['YOU', 'GOING', 'WHERE']);
+
+    const seq3 = buildIslGlossSequence('I do not like tea');
+    expect(seq3.map((t) => t.gloss)).toEqual(['I', 'TEA', 'LIKE', 'NOT']);
+  });
+
+  it('resolves multi-word phrases, synonyms, and fingerspelling fallback with disclaimer', () => {
+    const { lookupMap } = getAllVocabulary();
+    const result = translateEnglishToISL('Hi thank you zq', lookupMap);
+
+    expect(result.disclaimer).toBe(ISL_LINGUISTIC_DISCLAIMER);
+    expect(result.stats.totalTokens).toBeGreaterThanOrEqual(3);
+    expect(result.steps.some((s) => s.matchType === 'synonym')).toBe(true);
+    expect(result.steps.some((s) => s.matchType === 'fingerspell')).toBe(true);
+    expect(result.steps.every((s) => typeof s.file === 'string' && s.file.endsWith('.sigml'))).toBe(true);
   });
 });
 

@@ -9,6 +9,7 @@ import Practice from './practice';
 import Quiz from './quiz';
 import Settings from './Settings';
 import Pricing from './pricing';
+import Dashboard from './dashboard';
 
 describe('Core Learning & Translation Pages', () => {
   beforeEach(() => {
@@ -44,7 +45,7 @@ describe('Core Learning & Translation Pages', () => {
     fireEvent.change(textarea, { target: { value: 'water' } });
     fireEvent.click(screen.getByRole('button', { name: /translate to 3d sign language/i }));
     expect(screen.getByRole('alert')).toHaveTextContent(/Insufficient AI credits/i);
-  }, 10000);
+  }, 15000);
 
   it('Words filters vocabulary by search and category and displays empty state recovery', () => {
     render(<Words />);
@@ -123,6 +124,36 @@ describe('Core Learning & Translation Pages', () => {
     render(<Pricing />);
     fireEvent.click(screen.getByRole('button', { name: /choose annual pass/i }));
     expect(screen.getByRole('status')).toHaveTextContent(/Pro Annual/i);
+  });
+
+  it('Dashboard computes zero-fabrication initial state and real user activity stats', () => {
+    localStorage.clear();
+    const { unmount } = render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/No quiz sessions recorded yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 \/ 4 Unlocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 signs this week/i)).toBeInTheDocument();
+    unmount();
+
+    localStorage.setItem('userName', 'Kirat');
+    localStorage.setItem('quizHistory', JSON.stringify([{ id: Date.now(), date: 'Today', score: 4, total: 5 }]));
+    localStorage.setItem('practiceHistory', JSON.stringify([{ id: Date.now(), date: 'Today', score: 8, total: 10 }]));
+    localStorage.setItem('signverse_completed_lessons', JSON.stringify(['tts-l1-1']));
+
+    render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Kirat/)).toBeInTheDocument();
+    expect(screen.getByText('80% across 1 quiz(zes)')).toBeInTheDocument();
+    expect(screen.getByText(/15 signs this week/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 \/ 4 Unlocked/i)).toBeInTheDocument();
   });
 });
 

@@ -8,7 +8,6 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('@tensorflow/tfjs')) return 'vendor-tfjs';
           if (id.includes('react-router-dom')) return 'vendor-router';
           if (id.includes('modulesData.json')) return 'sign-dictionary-data';
         }

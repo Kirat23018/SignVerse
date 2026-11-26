@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import Webcam from "react-webcam";
 import { Link, useSearchParams } from "react-router-dom";
-import * as tf from "@tensorflow/tfjs";
 import { SIGN_TO_TEXT_TRACK } from "../data/dualTrackCourses";
 import { isProUnlocked } from "../utils/subscriptionManager";
 import UnlockProModal from "../components/UnlockProModal";
@@ -65,11 +64,6 @@ const TARGET_SIGNS = [
   }
 ];
 
-const DEFAULT_MODEL_CLASSES = [
-  "Hello", "Thank You", "Yes", "Stop", "Victory",
-  "One", "Rock", "Please", "Help", "Love"
-];
-
 export default function LiveCam() {
   const [searchParams] = useSearchParams();
   const moduleParam = searchParams.get("module");
@@ -83,15 +77,8 @@ export default function LiveCam() {
   const lastRecognizedRef = useRef("");
   const holdCountRef = useRef(0);
 
-  // ================= TENSORFLOW.JS LSTM SEQUENCE STATE =================
-  const tfModelRef = useRef(null);
-  const sequenceBufferRef = useRef([]); // sliding buffer of 30 frames * 63 features
-  const isPredictingRef = useRef(false);
-  const [isTfModelLoaded, setIsTfModelLoaded] = useState(false);
-  const [modelStatus, setModelStatus] = useState("Loading TensorFlow.js LSTM...");
-  const [modelClasses, setModelClasses] = useState(DEFAULT_MODEL_CLASSES);
-  const [dlPrediction, setDlPrediction] = useState({ word: "", confidence: 0 });
-  const [bufferLength, setBufferLength] = useState(0);
+  // Real-time landmark geometry & temporal sequence engine state
+  const [modelStatus] = useState("MediaPipe 21-Landmark Engine Active");
 
   // Pro & Paywall state
   const [isPro, setIsPro] = useState(isProUnlocked());
@@ -163,58 +150,6 @@ export default function LiveCam() {
       };
     }
   });
-
-  // ================= 1. LOAD CUSTOM TENSORFLOW.JS LSTM MODEL =================
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadCustomTfModel = async () => {
-      try {
-        setModelStatus("Initializing TensorFlow.js WebGL...");
-        await tf.ready();
-        setModelStatus("Loading custom model.json...");
-
-        // Attempt fetching class metadata
-        try {
-          const metaRes = await fetch("/models/metadata.json");
-          if (metaRes.ok) {
-            const meta = await metaRes.json();
-            if (meta.classes && Array.isArray(meta.classes)) {
-              setModelClasses(meta.classes);
-            }
-          }
-        } catch (e) {
-          console.warn("Metadata load fallback:", e);
-        }
-
-        // Load TensorFlow.js LayersModel
-        const model = await tf.loadLayersModel("/models/model.json");
-        if (!isMounted) return;
-
-        tfModelRef.current = model;
-        setIsTfModelLoaded(true);
-        setModelStatus("Custom LSTM Model Active (WebGL)");
-        console.log("[SignVerse] Custom LSTM Model successfully loaded into TensorFlow.js runtime.");
-      } catch (err) {
-        console.warn("[SignVerse] TensorFlow.js model load notice:", err);
-        if (isMounted) {
-          setModelStatus("Custom Model Ready (Fallback Mode)");
-          setIsTfModelLoaded(true);
-        }
-      }
-    };
-
-    loadCustomTfModel();
-
-    return () => {
-      isMounted = false;
-      if (tfModelRef.current) {
-        try {
-          tfModelRef.current.dispose();
-        } catch {}
-      }
-    };
-  }, []);
 
   // Listen for user settings & subscription updates
   useEffect(() => {
@@ -455,12 +390,6 @@ export default function LiveCam() {
   const drillParamRef = useRef(drillParam);
   drillParamRef.current = drillParam;
 
-  const dlPredictionRef = useRef(dlPrediction);
-  dlPredictionRef.current = dlPrediction;
-
-  const modelClassesRef = useRef(modelClasses);
-  modelClassesRef.current = modelClasses;
-
   // Sentence recognition refs (prevent camera restart on sequence update)
   const recognitionModeRef = useRef(recognitionMode);
   recognitionModeRef.current = recognitionMode;
@@ -591,80 +520,12 @@ export default function LiveCam() {
             const primaryLandmarks = multiHands[0];
             const secondaryLandmarks = multiHands[1] || null;
 
-            // ================= 30-FRAME SEQUENCE COLLECTION =================
-            const frameLandmarks = [];
-            for (let i = 0; i < 21; i++) {
-              const p = primaryLandmarks[i];
-              frameLandmarks.push(p.x, p.y, p.z || 0.0);
-            }
-
-            sequenceBufferRef.current.push(frameLandmarks);
-            if (sequenceBufferRef.current.length > 30) {
-              sequenceBufferRef.current.shift();
-            }
-            setBufferLength(sequenceBufferRef.current.length);
-
-            // ================= TENSORFLOW.JS LSTM INFERENCE =================
-            if (
-              tfModelRef.current &&
-              !isPredictingRef.current &&
-              sequenceBufferRef.current.length === 30
-            ) {
-              isPredictingRef.current = true;
-              const currentSequence = [...sequenceBufferRef.current];
-
-              (async () => {
-                try {
-                  const inputTensor = tf.tidy(() => {
-                    return tf.tensor3d([currentSequence], [1, 30, 63], "float32");
-                  });
-
-                  const predictionOutput = tfModelRef.current.predict(inputTensor);
-                  const probabilities = await predictionOutput.data();
-                  inputTensor.dispose();
-                  predictionOutput.dispose();
-
-                  let maxProb = 0;
-                  let maxClassIdx = -1;
-                  for (let i = 0; i < probabilities.length; i++) {
-                    if (probabilities[i] > maxProb) {
-                      maxProb = probabilities[i];
-                      maxClassIdx = i;
-                    }
-                  }
-
-                  const activeClasses = modelClassesRef.current;
-                  if (maxClassIdx >= 0 && maxProb >= 0.35 && activeClasses[maxClassIdx]) {
-                    const predictedWord = activeClasses[maxClassIdx];
-                    setDlPrediction({ word: predictedWord, confidence: maxProb });
-
-                    const curTarget = expectedTargetRef.current;
-                    if (curTarget && predictedWord.toLowerCase() === curTarget.toLowerCase()) {
-                      setTargetMatchCount((prev) => {
-                        const updated = prev + 1;
-                        if (updated >= 3 && !isTargetValidatedRef.current) {
-                          setIsTargetValidated(true);
-                          setValidationToast(`Target "${curTarget}" validated (+50 XP)`);
-                        }
-                        return updated;
-                      });
-                    }
-                  }
-                } catch (predErr) {
-                  console.warn("[SignVerse TensorFlow.js] Prediction error:", predErr);
-                } finally {
-                  isPredictingRef.current = false;
-                }
-              })();
-            }
-
             // ================= BRANCH BY RECOGNITION MODE =================
             if (recognitionModeRef.current === "sentence") {
               // ================= MODE B: TEMPORAL SENTENCE RECOGNITION =================
               const now = Date.now();
-              const activeDl = dlPredictionRef.current;
               // Detect custom sentence components supporting single or two hands
-              const comp = detectSentenceComponent(primaryLandmarks, activeDl.word, secondaryLandmarks);
+              const comp = detectSentenceComponent(primaryLandmarks, "", secondaryLandmarks);
 
               // If currently in cooldown after full sentence completion, hold current display
               if (now < sentenceCooldownUntilRef.current) {
@@ -772,11 +633,10 @@ export default function LiveCam() {
 
               setActiveGesture(res.gesture);
 
-              const activeDl = dlPredictionRef.current;
-              const activeText = (activeDl.confidence > 0.65 && activeDl.word) ? activeDl.word : res.text;
+              const activeText = res.text;
               setLiveText(activeText);
               setActiveSignId(res.id);
-              setConfidence(Math.max(res.conf, activeDl.confidence));
+              setConfidence(res.conf);
 
               const curExpected = expectedTargetRef.current;
               if (activeText && curExpected) {
@@ -833,11 +693,6 @@ export default function LiveCam() {
             candTokenFramesRef.current = 0;
             canAcceptNextTokenRef.current = true;
             setActiveCandidateToken(null);
-
-            if (sequenceBufferRef.current.length > 0) {
-              sequenceBufferRef.current.shift();
-              setBufferLength(sequenceBufferRef.current.length);
-            }
           }
 
           frameCountRef.current += 1;
@@ -972,7 +827,7 @@ export default function LiveCam() {
               <span>Live Camera Translator</span>
               <span style={{ fontSize: '12px', fontWeight: '800', background: 'rgba(124, 169, 146, 0.16)', color: '#7CA992', padding: '3px 10px', borderRadius: '12px', border: '1px solid rgba(124, 169, 146, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#7CA992', display: 'inline-block' }} />
-                <span>DEEP LEARNING LSTM • TFJS</span>
+                <span>MEDIAPIPE 21-LANDMARK • REAL-TIME</span>
               </span>
             </h1>
           </div>
@@ -1012,7 +867,7 @@ export default function LiveCam() {
           </div>
         </div>
 
-        {/* ================= MODEL STATUS & 30-FRAME TENSOR BUFFER BAR ================= */}
+        {/* ================= ENGINE STATUS BAR ================= */}
         <div
           style={{
             background: '#242A27',
@@ -1044,41 +899,18 @@ export default function LiveCam() {
                 color: '#7CA992'
               }}
             >
-              LSTM
+              21PT
             </div>
             <div>
               <div style={{ fontSize: '13px', fontWeight: '800', color: '#E4EAE6', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>{modelStatus}</span>
-                {isTfModelLoaded && (
-                  <span style={{ fontSize: '10.5px', background: 'rgba(124, 169, 146, 0.18)', color: '#7CA992', padding: '2px 8px', borderRadius: '6px' }}>
-                    model.json Loaded
-                  </span>
-                )}
+                <span style={{ fontSize: '10.5px', background: 'rgba(124, 169, 146, 0.18)', color: '#A3CBB7', padding: '2px 8px', borderRadius: '6px' }}>
+                  In-Browser Vision
+                </span>
               </div>
               <div style={{ fontSize: '12px', color: '#9CAEA4' }}>
-                Input: Tensor3D [1, 30, 63] • Vocabulary: {modelClasses.length} Dynamic Words
+                21 Hand Landmarks • 5 Static Signs + Multi-Step Sentence Sequencer
               </div>
-            </div>
-          </div>
-
-          {/* 30-Frame Sequence Buffer Meter */}
-          <div style={{ minWidth: '240px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: '800', color: '#9CAEA4', marginBottom: '6px' }}>
-              <span>LANDMARK SEQUENCE BUFFER</span>
-              <span style={{ color: bufferLength === 30 ? '#7CA992' : '#d4a373' }}>
-                {bufferLength} / 30 Frames ({Math.round((bufferLength / 30) * 100)}%)
-              </span>
-            </div>
-            <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-              <div
-                style={{
-                  width: `${(bufferLength / 30) * 100}%`,
-                  height: '100%',
-                  background: bufferLength === 30 ? '#7CA992' : '#d4a373',
-                  borderRadius: '999px',
-                  transition: 'width 0.1s ease'
-                }}
-              />
             </div>
           </div>
         </div>
@@ -1221,7 +1053,6 @@ export default function LiveCam() {
                         transition: 'all 0.15s ease'
                       }}
                     >
-                      <span>{s.icon}</span>
                       <span>{s.label}</span>
                     </button>
                   );
@@ -1651,12 +1482,6 @@ export default function LiveCam() {
                   {activeGesture && activeGesture !== "Awaiting Hand Sign..." && (
                     <div style={{ marginTop: '6px', fontSize: '13px', color: '#9CAEA4', fontWeight: '600' }}>
                       Gesture: <strong style={{ color: '#7CA992' }}>{activeGesture}</strong>
-                    </div>
-                  )}
-
-                  {dlPrediction.word && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#7CA992', fontWeight: '700' }}>
-                      LSTM Confidence: {Math.round(dlPrediction.confidence * 100)}% • Model Output: {dlPrediction.word}
                     </div>
                   )}
                 </div>

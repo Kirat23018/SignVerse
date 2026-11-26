@@ -1,47 +1,65 @@
 import React, { useState, useRef } from 'react';
 import modulesData from '../modulesData.json';
+import { playSiGMLFast } from '../utils/sigmlService';
 
 export default function Learn() {
-  // Sirf main core categories ko filter kar lete hain jo sikhane ke liye best hain
   const safeData = modulesData || {};
   const allCategories = Object.keys(safeData);
-  
-  // Jo categories sikhane ke liye main hain unhe pehle priority denge
   const preferredKeys = ['Alphabet', 'Numbers', 'Greetings', 'Relations', 'Family', 'A', '1'];
-  const coreCategories = allCategories.filter(cat => 
-    preferredKeys.some(key => cat.toLowerCase().includes(key.toLowerCase()))
+  const coreCategories = allCategories.filter((cat) =>
+    preferredKeys.some((key) => cat.toLowerCase().includes(key.toLowerCase()))
   );
   const displayCategories = coreCategories.length > 0 ? coreCategories : allCategories;
 
   const [activeModule, setActiveModule] = useState(displayCategories[0] || '');
   const [activeItem, setActiveItem] = useState(safeData[displayCategories[0]] ? safeData[displayCategories[0]][0] : null);
-  const viewMode = '3d';
   const iframeRef = useRef(null);
 
   const handleItemClick = (item) => {
     setActiveItem(item);
-    if (viewMode === '3d' && iframeRef.current) {
-      const sigmlFilePath = `${item.file}.sigml`;
-      try {
-        iframeRef.current.contentWindow.startPlayer(sigmlFilePath);
-      } catch (err) {
-        console.log("Player error", err);
-      }
+    if (iframeRef.current) {
+      playSiGMLFast(iframeRef.current, item.file);
     }
   };
 
   return (
-    <div style={{ display: 'flex', flex: 1, height: 'calc(100vh - 45px)', overflow: 'hidden', fontFamily: 'sans-serif' }}>
-      {/* Left Panel: Core Categories & Grid */}
-      <div style={{ width: '45%', padding: '30px', backgroundColor: '#fff', overflowY: 'auto', borderRight: '2px solid #eee' }}>
-        <h2 style={{ color: '#003366', marginTop: 0, marginBottom: '20px' }}>Core Learning Modules</h2>
-        <p style={{ color: '#666', fontSize: '14px', marginBottom: '20px' }}>Step-by-step essential signs for beginners (Alphabets, Numbers, Greetings & Relations).</p>
+    <div
+      className="signverse-split-container"
+      style={{
+        display: 'flex',
+        flex: 1,
+        height: 'calc(100vh - 64px)',
+        overflow: 'hidden',
+        fontFamily: "'Inter', system-ui, sans-serif",
+        backgroundColor: '#191C1A',
+        color: '#E4EAE6'
+      }}
+    >
+      {/* Left Panel */}
+      <div
+        className="signverse-panel-left"
+        style={{
+          width: '45%',
+          padding: '26px',
+          backgroundColor: '#1F2421',
+          overflowY: 'auto',
+          borderRight: '1px solid #2D3531',
+          boxSizing: 'border-box'
+        }}
+      >
+        <h1 style={{ color: '#E4EAE6', marginTop: 0, marginBottom: '8px', fontSize: '23px', fontWeight: '800' }}>
+          Core Learning Modules
+        </h1>
+        <p style={{ color: '#B5C5BC', fontSize: '13.5px', marginBottom: '20px', lineHeight: '1.45' }}>
+          Step-by-step essential signs for beginners (Alphabets, Numbers, Greetings &amp; Family).
+        </p>
 
-        {/* Category Tabs/Buttons */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '25px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '22px' }}>
           {displayCategories.slice(0, 8).map((cat) => (
             <button
+              type="button"
               key={cat}
+              aria-pressed={activeModule === cat}
               onClick={() => {
                 setActiveModule(cat);
                 if (safeData[cat] && safeData[cat][0]) {
@@ -49,10 +67,14 @@ export default function Learn() {
                 }
               }}
               style={{
-                padding: '8px 14px', borderRadius: '20px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold',
-                border: activeModule === cat ? 'none' : '1px solid #ccc',
-                backgroundColor: activeModule === cat ? '#003366' : '#f8f9fa',
-                color: activeModule === cat ? '#fff' : '#333'
+                padding: '7px 14px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                border: activeModule === cat ? '1px solid #7CA992' : '1px solid #3A443F',
+                backgroundColor: activeModule === cat ? '#7CA992' : '#242A27',
+                color: activeModule === cat ? '#0D1310' : '#B5C5BC'
               }}
             >
               {cat}
@@ -60,48 +82,81 @@ export default function Learn() {
           ))}
         </div>
 
-        <h3>Signs in: {activeModule}</h3>
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: (activeModule.toLowerCase().includes('alphabet') || activeModule.toLowerCase().includes('number')) ? 'repeat(4, 1fr)' : '1fr', 
-          gap: '10px', marginTop: '15px' 
-        }}>
-          {safeData[activeModule] && safeData[activeModule].map((item) => (
-            <button
-              key={item.file}
-              onClick={() => handleItemClick(item)}
-              style={{
-                padding: '10px 15px', fontSize: '14px', borderRadius: '6px', cursor: 'pointer', textAlign: 'left',
-                border: activeItem && activeItem.file === item.file ? 'none' : '1px solid #ddd',
-                backgroundColor: activeItem && activeItem.file === item.file ? '#689f38' : '#f9f9f9',
-                color: activeItem && activeItem.file === item.file ? '#fff' : '#333'
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
+        <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#A3CBB7', margin: '0 0 12px' }}>
+          Signs in: {activeModule}
+        </h2>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns:
+              activeModule.toLowerCase().includes('alphabet') || activeModule.toLowerCase().includes('number')
+                ? 'repeat(auto-fill, minmax(90px, 1fr))'
+                : 'repeat(auto-fill, minmax(150px, 1fr))',
+            gap: '10px'
+          }}
+        >
+          {safeData[activeModule] &&
+            safeData[activeModule]
+              .filter((item) => item && item.type !== 'video' && item.label && item.file)
+              .map((item) => {
+              const isSelected = activeItem && activeItem.file === item.file;
+              return (
+                <button
+                  type="button"
+                  key={item.file}
+                  aria-pressed={isSelected}
+                  onClick={() => handleItemClick(item)}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    border: isSelected ? '1px solid #A3CBB7' : '1px solid #3A443F',
+                    backgroundColor: isSelected ? '#7CA992' : '#242A27',
+                    color: isSelected ? '#0D1310' : '#E4EAE6'
+                  }}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
         </div>
       </div>
 
-      {/* Right Panel: Avatar Viewer */}
-      <div style={{ width: '55%', display: 'flex', flexDirection: 'column', backgroundColor: '#e5e7eb' }}>
+      {/* Right Panel */}
+      <div
+        className="signverse-panel-right"
+        style={{ width: '55%', display: 'flex', flexDirection: 'column', backgroundColor: '#191C1A' }}
+      >
         <div style={{ flex: 1, position: 'relative' }}>
-          <iframe 
-            ref={iframeRef} 
-            src="/player-applet.html" 
+          <iframe
+            ref={iframeRef}
+            src="/player-applet.html"
             title="Avatar Player"
-            style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#fff' }}
+            style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#191C1A' }}
             onLoad={() => {
               if (activeItem && iframeRef.current) {
-                try {
-                  iframeRef.current.contentWindow.startPlayer(`${activeItem.file}.sigml`);
-                } catch (e) { console.log(e); }
+                playSiGMLFast(iframeRef.current, activeItem.file);
               }
             }}
           />
         </div>
-        <div style={{ padding: '12px 20px', backgroundColor: '#c8d4e3', borderTop: '1px solid #bbb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Active Sign: <b>{activeItem ? activeItem.label : 'None'}</b></span>
+        <div
+          style={{
+            padding: '12px 20px',
+            backgroundColor: '#141715',
+            borderTop: '1px solid #2D3531',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            color: '#B5C5BC'
+          }}
+        >
+          <span>
+            Active Sign: <strong style={{ color: '#A3CBB7' }}>{activeItem ? activeItem.label : 'None'}</strong>
+          </span>
         </div>
       </div>
     </div>

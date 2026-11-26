@@ -1,38 +1,71 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import modulesData from '../modulesData.json';
+import { getAllVocabulary, playSiGMLFast, stopSiGML } from '../utils/sigmlService';
 import { getSubscriptionStatus, deductCredits } from '../utils/subscriptionManager';
-import { playSiGMLFast } from '../utils/sigmlService';
+import { translateEnglishToISL, ISL_LINGUISTIC_DISCLAIMER } from '../utils/islTranslator';
+
+const AVATARS = [
+  { id: 'luna', label: 'Luna' },
+  { id: 'marc', label: 'Marc' },
+  { id: 'anna', label: 'Anna' },
+  { id: 'francoise', label: 'Francoise' },
+  { id: 'siggi', label: 'Siggi' }
+];
+const VALID_AVATAR_IDS = new Set(AVATARS.map((a) => a.id));
+
+function readTranslateSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('signverse_user_settings') || 'null');
+    const avatar = VALID_AVATAR_IDS.has(parsed?.defaultAvatar) ? parsed.defaultAvatar : 'luna';
+    const spd = parseFloat(parsed?.avatarSpeed);
+    const speed = [0.8, 1.0, 1.5, 2.2].includes(spd) ? spd : spd >= 1.25 ? 1.5 : 1.5;
+    return { avatar, speed };
+  } catch {
+    return { avatar: 'luna', speed: 1.5 };
+  }
+}
 
 export default function Translate() {
+  const initialPrefs = readTranslateSettings();
   const [inputText, setInputText] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [currentAction, setCurrentAction] = useState('Type a sentence or click Voice to Sign...');
-  const [speedMultiplier, setSpeedMultiplier] = useState(1.5); // Default to Slow
+  const [speedMultiplier, setSpeedMultiplier] = useState(initialPrefs.speed);
   const [autoTranslateVoice, setAutoTranslateVoice] = useState(true);
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [subStatus, setSubStatus] = useState(getSubscriptionStatus());
   const [creditAlert, setCreditAlert] = useState('');
-  
+  const [selectedAvatar, setSelectedAvatar] = useState(initialPrefs.avatar);
+
   // Live Gloss and Sentence Sequence tracking
   const [activeGlossItem, setActiveGlossItem] = useState(null);
   const [activeTokenIndex, setActiveTokenIndex] = useState(-1);
   const [activeSequence, setActiveSequence] = useState([]);
+  const [islGlossOrder, setIslGlossOrder] = useState([]);
   const [liveCWASAGloss, setLiveCWASAGloss] = useState('');
   const [liveCWASASF, setLiveCWASASF] = useState('');
+  const [avatarNotice, setAvatarNotice] = useState('');
 
   const iframeRef = useRef(null);
   const recognitionRef = useRef(null);
   const finalTranscriptRef = useRef('');
+  const cancelPlaybackRef = useRef(false);
+  const playbackSessionIdRef = useRef(0);
 
-  // Listen for real-time CWASA gloss and frame broadcasts (same-origin verified)
+  // Listen for real-time CWASA gloss, frame, and status broadcasts (same-origin verified)
   useEffect(() => {
     const handleMsg = (e) => {
       if (e.origin && e.origin !== window.location.origin) return;
-      if (e.data && e.data.type === 'CWASA_GLOSS_UPDATE') {
+      if (e.data?.type === 'CWASA_GLOSS_UPDATE') {
         if (e.data.gloss) setLiveCWASAGloss(e.data.gloss);
         if (e.data.signFrame) setLiveCWASASF(e.data.signFrame);
+      } else if (e.data?.type === 'CWASA_STATUS') {
+        if (e.data.status === 'error' || e.data.status === 'warning') {
+          setAvatarNotice(e.data.message || '3D Avatar playback issue encountered.');
+        } else if (e.data.status === 'ready') {
+          setAvatarNotice('');
+        }
       }
     };
     window.addEventListener('message', handleMsg);
@@ -48,91 +81,37 @@ export default function Translate() {
     setSubStatus(getSubscriptionStatus());
   }, []);
 
-  // 1. High-Performance Flattened & Fast Lookup Hash Map for O(1) Dictionary Search
-  const { lookupMap } = useMemo(() => {
-    const list = [];
-    const map = new Map();
+  const { lookupMap } = useMemo(() => getAllVocabulary(), []);
 
-    for (const category in modulesData) {
-      if (Array.isArray(modulesData[category])) {
-        modulesData[category].forEach(item => {
-          if (item.type !== 'video' && item.label && item.file) {
-            list.push(item);
-            const key = item.label.toLowerCase().trim();
-            const path = item.file.includes('DictionarySigns') || item.file.includes('SignFiles')
-              ? `${item.file}.sigml`
-              : `SignFiles/${item.file}.sigml`;
-            map.set(key, { label: item.label, path: path });
-          }
-        });
-      }
-    }
-    return { allWords: list, lookupMap: map };
-  }, []);
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // 2. Comprehensive Multi-Word Phrases & Synonym Expansion Dictionary
-  const multiWordPhrases = [
-    { phrase: 'thank you', target: 'thank you' },
-    { phrase: 'good morning', target: 'good morning' },
-    { phrase: 'good night', target: 'good night' },
-    { phrase: 'how are you', target: 'how are you' },
-    { phrase: 'see you', target: 'goodbye' },
-    { phrase: 'i love you', target: 'love' },
-    { phrase: 'ice cream', target: 'ice cream' }
-  ];
-
-  const synonymMap = {
-    'crucial': 'important',
-    'vital': 'important',
-    'dad': 'father',
-    'papa': 'father',
-    'daddy': 'father',
-    'mom': 'mother',
-    'mummy': 'mother',
-    'mommy': 'mother',
-    'bro': 'brother',
-    'sis': 'sister',
-    'glad': 'happy',
-    'joyful': 'happy',
-    'sadness': 'sad',
-    'unhappy': 'sad',
-    'kids': 'children',
-    'child': 'children',
-    'huge': 'big',
-    'large': 'big',
-    'tiny': 'small',
-    'little': 'small',
-    'quick': 'fast',
-    'rapid': 'fast',
-    'speak': 'talk',
-    'tell': 'talk',
-    'hi': 'hello',
-    'hey': 'hello',
-    'namaste': 'hello',
-    'bye': 'goodbye',
-    'thanks': 'thank you',
-    'thx': 'thank you',
-    'pls': 'please',
-    'sorry': 'sorry',
-    'apologize': 'sorry',
-    'yes': 'yes',
-    'yeah': 'yes',
-    'yep': 'yes',
-    'no': 'no',
-    'nope': 'no',
-    'drink': 'water',
-    'eat': 'food',
-    'meal': 'food'
+  const handleStopPlayback = () => {
+    playbackSessionIdRef.current += 1;
+    cancelPlaybackRef.current = true;
+    stopSiGML(iframeRef.current);
+    setIsPlaying(false);
+    setCurrentAction('Playback stopped by user.');
   };
 
-  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const handleAvatarChange = (nextAvatar) => {
+    setSelectedAvatar(nextAvatar);
+    if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage(
+          { type: 'SET_AVATAR', avatar: nextAvatar },
+          window.location.origin
+        );
+      } catch {
+        // Non-fatal
+      }
+    }
+  };
 
-  // 3. High-Speed Multi-Tier Translation Engine
+  // High-Speed English-to-ISL Linguistic Translation Engine
   const handleTranslate = async (textOverride) => {
     const textToProcess = (typeof textOverride === 'string' ? textOverride : inputText).trim();
     if (!textToProcess || isPlaying) return;
 
-    // Check & Deduct Credits for Translation
     const creditRes = deductCredits(1);
     if (!creditRes.success) {
       setCreditAlert(creditRes.message);
@@ -140,83 +119,60 @@ export default function Translate() {
     }
     setCreditAlert('');
     setSubStatus(getSubscriptionStatus());
-    
-    setIsPlaying(true);
-    let rawText = textToProcess.toLowerCase();
-    const playSequence = [];
 
-    // Step A: Multi-word phrase matching check
-    for (const item of multiWordPhrases) {
-      if (rawText.includes(item.phrase)) {
-        if (lookupMap.has(item.target)) {
-          const signData = lookupMap.get(item.target);
-          playSequence.push({ label: signData.label, path: signData.path, type: 'word' });
-          rawText = rawText.replace(item.phrase, ' ');
-        }
-      }
-    }
-
-    // Step B: Tokenize individual words
-    const words = rawText.split(/\s+/).filter(Boolean);
-
-    for (let word of words) {
-      const cleanWord = word.replace(/[^a-z0-9]/g, ''); 
-      if (!cleanWord) continue;
-
-      let match = lookupMap.get(cleanWord);
-      
-      // Synonym resolution
-      if (!match && synonymMap[cleanWord]) {
-        match = lookupMap.get(synonymMap[cleanWord]);
-      }
-
-      if (match) {
-        playSequence.push({ label: match.label, path: match.path, type: 'word' });
-      } else {
-        // High-Speed Tokenization (Letter by letter fingerspelling fallback)
-        for (let char of cleanWord) {
-          if (/[a-z]/.test(char)) {
-            playSequence.push({ 
-              label: `Letter: ${char.toUpperCase()}`, 
-              path: `SignFiles/${char.toUpperCase()}.sigml`, 
-              type: 'letter' 
-            });
-          }
-        }
-      }
-    }
-
-    if (playSequence.length === 0) {
+    const translated = translateEnglishToISL(textToProcess, lookupMap);
+    if (translated.steps.length === 0) {
       setCurrentAction('No valid signs found for the input.');
-      setIsPlaying(false);
       return;
     }
 
-    // Step C: Play sequence sequentially with zero latency & live gloss tracking
+    try {
+      const prevCount = parseInt(localStorage.getItem('signverse_translation_count') || '0', 10) || 0;
+      localStorage.setItem('signverse_translation_count', String(prevCount + 1));
+    } catch {
+      // Safe localStorage guard
+    }
+
+    const sessionId = ++playbackSessionIdRef.current;
+    cancelPlaybackRef.current = false;
+    setIsPlaying(true);
+    setIslGlossOrder(translated.glossOrder);
+
+    const playSequence = translated.steps.map((step) => ({
+      label: step.displayWord,
+      path: step.file,
+      type: step.isFingerspell ? 'letter' : 'word',
+      matchType: step.matchType
+    }));
     setActiveSequence(playSequence);
-    for (let i = 0; i < playSequence.length; i++) {
+
+    for (let i = 0; i < playSequence.length; i += 1) {
+      if (cancelPlaybackRef.current || playbackSessionIdRef.current !== sessionId) break;
       const item = playSequence[i];
       setActiveTokenIndex(i);
       setActiveGlossItem(item);
       setCurrentAction(`Playing [${i + 1}/${playSequence.length}]: ${item.label}`);
-      
+
       if (iframeRef.current) {
         playSiGMLFast(iframeRef.current, item.path, speedMultiplier);
       }
 
-      // Base delay per gesture scaled by speed multiplier
-      const baseDelay = item.type === 'letter' ? 1400 : 2600; 
+      const baseDelay = item.type === 'letter' ? 1400 : 2400;
       await sleep(baseDelay * speedMultiplier);
     }
 
-    setCurrentAction('✨ Translation Complete!');
-    setIsPlaying(false);
+    if (playbackSessionIdRef.current === sessionId && !cancelPlaybackRef.current) {
+      setCurrentAction('Translation Complete!');
+      setIsPlaying(false);
+    } else if (playbackSessionIdRef.current === sessionId) {
+      setIsPlaying(false);
+    }
   };
 
-  // 4. Voice-to-Text & Voice-to-Sign Recognition Handler
+  // Voice-to-Text & Voice-to-Sign Recognition Handler
   const toggleVoiceRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
+
     if (!SpeechRecognition) {
       setVoiceSupported(false);
       setCurrentAction('Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
@@ -241,14 +197,14 @@ export default function Translate() {
 
       recognition.onstart = () => {
         setIsListening(true);
-        setCurrentAction('🎙️ Listening... Speak clearly into your microphone');
+        setCurrentAction('Listening... Speak clearly into your microphone');
       };
 
       recognition.onresult = (event) => {
         let interimTranscript = '';
         let currentFinal = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
           if (event.results[i].isFinal) {
             currentFinal += event.results[i][0].transcript;
           } else {
@@ -266,14 +222,13 @@ export default function Translate() {
       };
 
       recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
         setIsListening(false);
         if (event.error === 'not-allowed') {
-          setCurrentAction('❌ Microphone access was denied. Please allow microphone permissions.');
+          setCurrentAction('Microphone access was denied. Please allow microphone permissions.');
         } else if (event.error === 'no-speech') {
-          setCurrentAction('⚠️ No speech detected. Please click the mic and try again.');
+          setCurrentAction('No speech detected. Please click the mic and try again.');
         } else {
-          setCurrentAction(`⚠️ Voice error: ${event.error}`);
+          setCurrentAction(`Voice error: ${event.error}`);
         }
       };
 
@@ -281,18 +236,17 @@ export default function Translate() {
         setIsListening(false);
         const finalText = finalTranscriptRef.current || inputText;
         if (finalText.trim()) {
-          setCurrentAction(`🗣️ Voice recognized: "${finalText.trim()}"`);
+          setCurrentAction(`Voice recognized: "${finalText.trim()}"`);
           if (autoTranslateVoice) {
             setTimeout(() => {
               handleTranslate(finalText.trim());
-            }, 500);
+            }, 400);
           }
         }
       };
 
       recognition.start();
-    } catch (err) {
-      console.error('Failed to start speech recognition:', err);
+    } catch {
       setIsListening(false);
     }
   };
@@ -305,158 +259,151 @@ export default function Translate() {
   };
 
   return (
-    <div 
+    <div
       className="signverse-split-container"
       style={{
         display: 'flex',
         flex: 1,
         width: '100%',
-        height: 'calc(100vh - 56px)',
+        height: 'calc(100vh - 64px)',
         overflow: 'hidden',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        backgroundColor: '#f8fafc',
+        fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        backgroundColor: '#191C1A',
+        color: '#E4EAE6',
         position: 'relative'
       }}
     >
-      
-      {/* Left Panel: Text & Voice Input & Controls */}
-      <div 
+      {/* Left Panel: Text & Voice Controls */}
+      <div
         className="signverse-panel-left"
         style={{
           width: '45%',
           height: '100%',
-          padding: '26px 30px',
-          backgroundColor: '#ffffff',
+          padding: '24px 28px',
+          backgroundColor: '#1F2421',
           overflowY: 'auto',
           overflowX: 'hidden',
-          borderRight: '2px solid #e2e8f0',
+          borderRight: '1px solid #2D3531',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          boxSizing: 'border-box'
         }}
       >
-        
-        {/* Header with Credits & Plan Badge */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-          <div>
-            <h1 style={{ color: '#0f172a', margin: 0, fontSize: '22px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>AI Text &amp; Voice to Sign</span>
-              <span style={{ fontSize: '11.5px', backgroundColor: '#e0f2fe', color: '#004080', padding: '3px 8px', borderRadius: '12px', fontWeight: '700' }}>
-                Voice <span aria-hidden="true">🎙️</span>
-              </span>
-            </h1>
-          </div>
+          <h1 style={{ color: '#E4EAE6', margin: 0, fontSize: '21px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>Text &amp; Voice to ISL</span>
+            <span style={{ fontSize: '11px', backgroundColor: 'rgba(124,169,146,0.16)', color: '#A3CBB7', border: '1px solid rgba(124,169,146,0.3)', padding: '3px 8px', borderRadius: '10px', fontWeight: '700' }}>
+              3D Avatar
+            </span>
+          </h1>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <Link to="/text-to-sign" style={{ textDecoration: 'none' }}>
-              <span style={{ fontSize: '12px', background: 'rgba(255, 255, 255, 0.08)', color: '#0f172a', padding: '5px 12px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
-                <span aria-hidden="true">🗣️ </span>Hub
-              </span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Link to="/text-to-sign" style={{ textDecoration: 'none', fontSize: '12px', background: '#242A27', color: '#E4EAE6', padding: '5px 10px', borderRadius: '10px', fontWeight: '700', border: '1px solid #3A443F' }}>
+              Learning Hub
             </Link>
-            <Link to="/sign-to-text" style={{ textDecoration: 'none' }}>
-              <span style={{ fontSize: '12px', background: 'linear-gradient(135deg, #047857, #065f46)', color: '#ffffff', padding: '5px 12px', borderRadius: '14px', fontWeight: '700', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)' }}>
-                <span aria-hidden="true">📷 </span>Sign-to-Text Mode
-              </span>
-            </Link>
-            <Link to="/pricing" style={{ textDecoration: 'none' }}>
-              <span style={{ fontSize: '12px', backgroundColor: '#f1f5f9', color: '#1e293b', padding: '4px 10px', borderRadius: '14px', fontWeight: '700', border: '1px solid #cbd5e1' }}>
-                {subStatus.isPaidPlan ? '✨ Pro (Unlimited)' : `🪙 ${subStatus.credits} Credits • ${subStatus.trialDaysRemaining}d Trial`}
-              </span>
+            <Link to="/pricing" style={{ textDecoration: 'none', fontSize: '12px', backgroundColor: 'rgba(124,169,146,0.15)', color: '#A3CBB7', padding: '5px 10px', borderRadius: '10px', fontWeight: '700', border: '1px solid rgba(124,169,146,0.3)' }}>
+              {subStatus.isPaidPlan ? 'Pro (Unlimited)' : `${subStatus.credits} Credits • ${subStatus.trialDaysRemaining}d Trial`}
             </Link>
           </div>
         </div>
-        
-        <p style={{ color: '#475569', fontSize: '13px', marginBottom: '14px', lineHeight: '1.4' }}>
-          Speak or type sentences. High-speed instant offline matcher animates 3D avatars immediately!
+
+        <p style={{ color: '#B5C5BC', fontSize: '13px', margin: '0 0 14px', lineHeight: '1.45' }}>
+          Speak or type English sentences. Text is mapped to approximate ISL gloss order (Topic-Comment / SOV) and animated by our 3D WebGL avatar.
         </p>
 
         {creditAlert && (
-          <div role="alert" style={{ padding: '10px 14px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '10px', marginBottom: '14px', fontSize: '13px', fontWeight: '700', border: '1px solid #fca5a5' }}>
-            ⚠️ {creditAlert} <Link to="/pricing" style={{ color: '#004080', textDecoration: 'underline', marginLeft: '6px' }}>Upgrade to Pro</Link>
+          <div role="alert" style={{ padding: '10px 14px', backgroundColor: '#3B1E1E', color: '#FECACA', borderRadius: '10px', marginBottom: '14px', fontSize: '13px', fontWeight: '700', border: '1px solid #7F1D1D' }}>
+            {creditAlert} <Link to="/pricing" style={{ color: '#A3CBB7', textDecoration: 'underline', marginLeft: '6px' }}>Upgrade to Pro</Link>
           </div>
         )}
 
-        {/* Voice Recognition Action Card */}
-        <div style={{ 
-          backgroundColor: isListening ? '#fff3e0' : '#f8fafc', 
-          border: isListening ? '2px solid #ff9800' : '1px solid #e2e8f0', 
-          borderRadius: '12px', padding: '12px 14px', marginBottom: '14px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
-          transition: 'all 0.3s ease'
-        }}>
+        {/* Voice Recognition Card */}
+        <div
+          style={{
+            backgroundColor: isListening ? 'rgba(245,158,11,0.12)' : '#242A27',
+            border: isListening ? '1.5px solid #F59E0B' : '1px solid #3A443F',
+            borderRadius: '12px',
+            padding: '12px 14px',
+            marginBottom: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
+              type="button"
               onClick={toggleVoiceRecognition}
               disabled={isPlaying}
               style={{
-                backgroundColor: isListening ? '#ef4444' : '#004080',
-                color: 'white',
+                backgroundColor: isListening ? '#DC2626' : '#7CA992',
+                color: isListening ? '#FFFFFF' : '#0D1310',
                 border: 'none',
                 padding: '8px 14px',
-                borderRadius: '25px',
-                fontSize: '13.5px',
-                fontWeight: '700',
-                cursor: isPlaying ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: isListening ? '0 0 15px rgba(239, 68, 68, 0.6)' : '0 2px 8px rgba(0,0,0,0.1)',
-                animation: isListening ? 'pulse-mic 1.2s infinite' : 'none',
-                transition: 'all 0.2s ease'
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '800',
+                cursor: isPlaying ? 'not-allowed' : 'pointer'
               }}
             >
-              {isListening ? '⏹️ Stop Listening' : '🎙️ Speak (Voice to Sign)'}
+              {isListening ? 'Stop Listening' : 'Speak (Voice to Sign)'}
             </button>
-
-            {isListening && (
-              <span style={{ color: '#ea580c', fontSize: '12.5px', fontWeight: '700', animation: 'fade 1.5s infinite' }}>
-                Listening live...
-              </span>
-            )}
+            {isListening && <span style={{ color: '#FCD34D', fontSize: '12px', fontWeight: '700' }}>Listening live...</span>}
           </div>
 
-          {/* Auto Translate Toggle */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', cursor: 'pointer', fontWeight: '500' }}>
-            <input 
-              type="checkbox" 
-              checked={autoTranslateVoice} 
-              onChange={(e) => setAutoTranslateVoice(e.target.checked)} 
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#B5C5BC', cursor: 'pointer', fontWeight: '600' }}>
+            <input
+              type="checkbox"
+              checked={autoTranslateVoice}
+              onChange={(e) => setAutoTranslateVoice(e.target.checked)}
               style={{ cursor: 'pointer' }}
             />
             Auto-translate after speaking
           </label>
         </div>
-        
-        {/* Text Area with Clear Button */}
+
+        {/* Text Input */}
         <div style={{ position: 'relative', marginBottom: '14px' }}>
           <label htmlFor="translate-text-input" className="sr-only">
             Enter text to translate into 3D sign language
           </label>
           <textarea
             id="translate-text-input"
-            placeholder={isListening ? "Listening to your voice... speak now!" : "Enter text here or speak using the mic above (e.g., Hello father it is crucial)..."}
+            placeholder={isListening ? 'Listening to your voice...' : 'Enter English text (e.g., Hello, what is your name?)'}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            style={{ 
-              width: '100%', height: '110px', padding: '12px 36px 12px 12px', borderRadius: '10px', 
-              border: isListening ? '2px solid #ff9800' : '1.5px solid #cbd5e1', boxSizing: 'border-box', 
-              fontSize: '14.5px', resize: 'none', fontFamily: 'inherit',
-              color: '#0f172a', backgroundColor: '#ffffff',
-              transition: 'border-color 0.2s, box-shadow 0.2s'
+            style={{
+              width: '100%',
+              height: '104px',
+              padding: '12px 36px 12px 12px',
+              borderRadius: '12px',
+              border: isListening ? '2px solid #F59E0B' : '1px solid #3A443F',
+              boxSizing: 'border-box',
+              fontSize: '14.5px',
+              resize: 'none',
+              fontFamily: 'inherit',
+              color: '#E4EAE6',
+              backgroundColor: '#191C1A'
             }}
-            onFocus={(e) => e.target.style.borderColor = '#004080'}
-            onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
           />
-
           {inputText && (
             <button
               type="button"
               onClick={() => setInputText('')}
               aria-label="Clear input text"
-              title="Clear text"
               style={{
-                position: 'absolute', right: '12px', top: '12px', background: 'transparent',
-                border: 'none', color: '#475569', fontSize: '16px', cursor: 'pointer', padding: '4px'
+                position: 'absolute',
+                right: '10px',
+                top: '10px',
+                background: 'transparent',
+                border: 'none',
+                color: '#B5C5BC',
+                fontSize: '16px',
+                cursor: 'pointer',
+                padding: '4px'
               }}
             >
               <span aria-hidden="true">✕</span>
@@ -464,37 +411,21 @@ export default function Translate() {
           )}
         </div>
 
-        {/* Interactive High-Contrast Speed Controller Card */}
-        <div style={{
-          marginBottom: '16px', padding: '12px 14px', backgroundColor: '#f1f5f9',
-          borderRadius: '12px', border: '1.5px solid #cbd5e1',
-          display: 'flex', flexDirection: 'column', gap: '8px'
-        }}>
+        {/* Speed Controller */}
+        <div style={{ marginBottom: '14px', padding: '12px 14px', backgroundColor: '#242A27', borderRadius: '12px', border: '1px solid #3A443F', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>⏱️ Speed:</span>
-              <span style={{ 
-                fontSize: '11px', 
-                backgroundColor: speedMultiplier === 1.5 ? '#dcfce7' : speedMultiplier <= 0.8 ? '#fef3c7' : '#e0e7ff',
-                color: speedMultiplier === 1.5 ? '#14532d' : speedMultiplier <= 0.8 ? '#78350f' : '#1e1b4b',
-                border: speedMultiplier === 1.5 ? '1px solid #86efac' : speedMultiplier <= 0.8 ? '1px solid #fcd34d' : '1px solid #c7d2fe',
-                padding: '2px 8px', borderRadius: '12px', fontWeight: '800'
-              }}>
-                {speedMultiplier === 0.8 ? '0.8x Fast 🐇' : speedMultiplier === 1.0 ? '1.0x Normal 🚶' : speedMultiplier === 1.5 ? '1.5x Slow (Recommended) 🐢' : '2.2x Step 🔍'}
-              </span>
+            <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#E4EAE6' }}>
+              Playback Speed: <span style={{ color: '#A3CBB7' }}>{speedMultiplier}x</span>
             </span>
-            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>
-              Press <kbd style={{ backgroundColor: '#ffffff', color: '#0f172a', padding: '2px 5px', borderRadius: '4px', border: '1px solid #94a3b8', fontSize: '10.5px', fontWeight: '700' }}>Enter ↵</kbd>
-            </span>
+            <span style={{ fontSize: '11px', color: '#9CAEA4' }}>Press Enter to translate</span>
           </div>
 
-          {/* Segmented Speed Button Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
             {[
-              { label: '⚡ Fast', value: 0.8, desc: 'Advanced' },
-              { label: '🚶 Normal', value: 1.0, desc: '1.0x' },
-              { label: '🐢 Slow', value: 1.5, desc: 'Recommended' },
-              { label: '🔍 Step', value: 2.2, desc: 'Detailed' }
+              { label: 'Fast', value: 0.8, desc: '0.8x' },
+              { label: 'Normal', value: 1.0, desc: '1.0x' },
+              { label: 'Slow', value: 1.5, desc: 'Recommended' },
+              { label: 'Step', value: 2.2, desc: 'Detailed' }
             ].map((option) => {
               const isSelected = speedMultiplier === option.value;
               return (
@@ -507,93 +438,121 @@ export default function Translate() {
                   style={{
                     padding: '7px 4px',
                     borderRadius: '8px',
-                    border: isSelected ? '2.5px solid #002d62' : '1.5px solid #94a3b8',
-                    backgroundColor: isSelected ? '#004080' : '#ffffff',
+                    border: isSelected ? '1.5px solid #7CA992' : '1px solid #3A443F',
+                    backgroundColor: isSelected ? '#7CA992' : '#191C1A',
+                    color: isSelected ? '#0D1310' : '#E4EAE6',
                     cursor: isPlaying ? 'not-allowed' : 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
-                    transition: 'all 0.2s ease',
-                    boxShadow: isSelected ? '0 4px 10px rgba(0, 64, 128, 0.3)' : '0 1px 2px rgba(0,0,0,0.05)'
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '1px'
                   }}
                 >
-                  <span style={{ fontSize: '12px', fontWeight: '800', color: isSelected ? '#ffffff' : '#0f172a', display: 'block' }}>
-                    {option.label}
-                  </span>
-                  <span style={{ fontSize: '9.5px', fontWeight: '700', color: isSelected ? '#e0f2fe' : '#475569', display: 'block' }}>
-                    {option.desc}
-                  </span>
+                  <span style={{ fontSize: '12px', fontWeight: '800' }}>{option.label}</span>
+                  <span style={{ fontSize: '10px', opacity: isSelected ? 0.85 : 0.7 }}>{option.desc}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Translate Button */}
-        <button 
-          onClick={() => handleTranslate()}
-          disabled={isPlaying || !inputText.trim()}
-          style={{
-            width: '100%', padding: '13px', 
-            backgroundColor: isPlaying || !inputText.trim() ? '#94a3b8' : '#10b981', 
-            color: 'white', border: 'none', borderRadius: '10px', 
-            fontSize: '15.5px', fontWeight: '800', cursor: isPlaying ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
-            boxShadow: isPlaying || !inputText.trim() ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.35)'
-          }}
-        >
-          {isPlaying ? (
-            <>
-              <span className="spinner" />
-              <span>3D Avatar Signing in Progress...</span>
-            </>
-          ) : (
-            <>
-              <span>🤟 Translate to 3D Sign Language</span>
-            </>
-          )}
-        </button>
+        {/* Translate & Stop Actions */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => handleTranslate()}
+            disabled={isPlaying || !inputText.trim()}
+            style={{
+              flex: 1,
+              padding: '13px',
+              backgroundColor: isPlaying || !inputText.trim() ? '#2D3531' : '#7CA992',
+              color: isPlaying || !inputText.trim() ? '#85968C' : '#0D1310',
+              border: 'none',
+              borderRadius: '10px',
+              fontSize: '15px',
+              fontWeight: '800',
+              cursor: isPlaying || !inputText.trim() ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            {isPlaying ? '3D Avatar Signing...' : 'Translate to 3D Sign Language'}
+          </button>
 
-        {/* Live Status Indicator Card */}
+          {isPlaying && (
+            <button
+              type="button"
+              onClick={handleStopPlayback}
+              style={{
+                padding: '0 16px',
+                backgroundColor: '#3B1E1E',
+                color: '#FECACA',
+                border: '1px solid #7F1D1D',
+                borderRadius: '10px',
+                fontSize: '13.5px',
+                fontWeight: '800',
+                cursor: 'pointer'
+              }}
+            >
+              Stop
+            </button>
+          )}
+        </div>
+
+        {/* Live Status Card (Single accessible status live region) */}
         <div
           role="status"
           aria-live="polite"
           style={{
-          marginTop: '16px', padding: '12px 16px', backgroundColor: isPlaying ? '#dcfce7' : isListening ? '#fef3c7' : '#f8fafc', 
-          borderRadius: '10px', border: isPlaying ? '1px solid #86efac' : isListening ? '1px solid #fcd34d' : '1px solid #e2e8f0',
-          textAlign: 'center', transition: 'all 0.3s ease'
-        }}>
-          <h2 style={{ margin: '0 0 4px 0', color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '700' }}>
+            marginTop: '14px',
+            padding: '12px 16px',
+            backgroundColor: isPlaying ? 'rgba(124,169,146,0.14)' : '#242A27',
+            borderRadius: '10px',
+            border: isPlaying ? '1px solid #7CA992' : '1px solid #3A443F',
+            textAlign: 'center'
+          }}
+        >
+          <div style={{ color: '#9CAEA4', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '700', marginBottom: '4px' }}>
             System Status
-          </h2>
-          <p style={{ 
-            fontSize: '14px', fontWeight: '800', color: isPlaying ? '#15803d' : isListening ? '#b45309' : '#004080', margin: 0,
-            animation: isPlaying || isListening ? 'pulse 1.5s infinite' : 'none' 
-          }}>
+          </div>
+          <p style={{ fontSize: '14px', fontWeight: '800', color: '#E4EAE6', margin: 0 }}>
             {currentAction}
           </p>
         </div>
 
+        {/* ISL Linguistic Gloss Approximation Note */}
+        <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', backgroundColor: '#191C1A', border: '1px solid #2D3531', fontSize: '11.5px', color: '#9CAEA4', lineHeight: '1.45' }}>
+          <strong style={{ color: '#A3CBB7' }}>ISL Grammar Note:</strong> {ISL_LINGUISTIC_DISCLAIMER}
+          {islGlossOrder.length > 0 && (
+            <div style={{ marginTop: '6px', color: '#E4EAE6' }}>
+              Gloss Order: <span style={{ fontWeight: '700', color: '#7CA992' }}>{islGlossOrder.join(' + ')}</span>
+            </div>
+          )}
+        </div>
+
         {!voiceSupported && (
-          <p style={{ fontSize: '11.5px', color: '#ef4444', marginTop: '10px', textAlign: 'center' }}>
-            ℹ️ Note: Voice input requires a browser with Web Speech API support (Google Chrome or Microsoft Edge).
+          <p style={{ fontSize: '11.5px', color: '#FCA5A5', marginTop: '10px', textAlign: 'center' }}>
+            Voice input requires Web Speech API support (Google Chrome or Microsoft Edge).
           </p>
         )}
       </div>
 
-      {/* Right Panel: 3D Avatar Viewer & Live Gloss Pipeline HUD */}
-      <div 
+      {/* Right Panel: 3D Avatar Viewer & Sage Gloss HUD */}
+      <div
         className="signverse-panel-right"
         style={{
           width: '55%',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#e5e7eb',
+          backgroundColor: '#191C1A',
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        {/* Avatar Viewport Frame (Upper section) */}
-        <div 
+        <div
           className="signverse-avatar-frame"
           style={{
             flex: 1,
@@ -603,100 +562,121 @@ export default function Translate() {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: '#e5e7eb'
+            backgroundColor: '#191C1A'
           }}
         >
-          <iframe 
-            ref={iframeRef} 
-            src="/player-applet.html" 
+          <iframe
+            ref={iframeRef}
+            src="/player-applet.html"
             title="CWASA Avatar Player"
             className="signverse-avatar-iframe"
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              display: 'block'
-            }}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           />
+
+          {avatarNotice && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '12px',
+                left: '16px',
+                right: '16px',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(25,28,26,0.92)',
+                border: '1px solid #F59E0B',
+                color: '#FDE68A',
+                fontSize: '12px'
+              }}
+            >
+              {avatarNotice}
+            </div>
+          )}
         </div>
 
-        {/* Right Panel BOTTOM Gloss & Pipeline HUD (Green Theme with Times New Roman) */}
+        {/* Bottom Gloss & Pipeline HUD (Cohesive Sage Theme) */}
         <div
           style={{
-            padding: '12px 20px',
-            background: 'linear-gradient(180deg, #052e16 0%, #14532d 100%)',
-            color: '#ffffff',
-            borderTop: '3px solid #22c55e',
+            padding: '14px 20px',
+            backgroundColor: '#141715',
+            color: '#E4EAE6',
+            borderTop: '1px solid #2D3531',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
-            zIndex: 10,
-            boxShadow: '0 -4px 14px rgba(0,0,0,0.25)',
-            fontFamily: '"Times New Roman", Times, serif'
+            zIndex: 10
           }}
         >
-          {/* Active Gloss Line */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#86efac', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                LIVE GLOSS:
+              <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#7CA992', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                Live Gloss
               </span>
               <span
                 style={{
-                  backgroundColor: 'rgba(34, 197, 94, 0.25)',
-                  color: '#4ade80',
-                  border: '1.5px solid #22c55e',
-                  padding: '4px 16px',
+                  backgroundColor: 'rgba(124, 169, 146, 0.16)',
+                  color: '#A3CBB7',
+                  border: '1px solid rgba(124, 169, 146, 0.35)',
+                  padding: '4px 12px',
                   borderRadius: '8px',
-                  fontSize: '19px',
-                  fontWeight: 'bold',
-                  letterSpacing: '1px',
-                  fontFamily: '"Times New Roman", Times, serif'
+                  fontSize: '16px',
+                  fontWeight: '800'
                 }}
               >
                 {liveCWASAGloss || activeGlossItem?.label || 'READY'}
               </span>
               <span
                 style={{
-                  fontSize: '12px',
-                  backgroundColor: isPlaying ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                  color: isPlaying ? '#4ade80' : '#bbf7d0',
-                  border: isPlaying ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.2)',
+                  fontSize: '11.5px',
+                  backgroundColor: isPlaying ? 'rgba(124, 169, 146, 0.2)' : 'rgba(255,255,255,0.06)',
+                  color: isPlaying ? '#A3CBB7' : '#B5C5BC',
                   padding: '3px 10px',
-                  borderRadius: '12px',
-                  fontWeight: 'bold'
+                  borderRadius: '10px',
+                  fontWeight: '700'
                 }}
               >
-                {isPlaying ? '🟢 Signing...' : '⚪ Idle'}
+                {isPlaying ? 'Signing...' : 'Idle'}
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
-              <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: '6px', color: '#dcfce7', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-                Avatar: <strong style={{ color: '#ffffff' }}>Luna</strong>
-              </span>
-              <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: '6px', color: '#dcfce7', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-                Speed: <strong style={{ color: '#ffffff' }}>{speedMultiplier}x</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px' }}>
+              <label htmlFor="translate-avatar-select" className="sr-only">
+                Select 3D Sign Avatar
+              </label>
+              <select
+                id="translate-avatar-select"
+                value={selectedAvatar}
+                onChange={(e) => handleAvatarChange(e.target.value)}
+                style={{
+                  backgroundColor: '#242A27',
+                  color: '#E4EAE6',
+                  border: '1px solid #3A443F',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                {AVATARS.map((av) => (
+                  <option key={av.id} value={av.id}>
+                    Avatar: {av.label}
+                  </option>
+                ))}
+              </select>
+
+              <span style={{ backgroundColor: '#242A27', padding: '4px 10px', borderRadius: '8px', color: '#B5C5BC', border: '1px solid #3A443F' }}>
+                Speed: <strong style={{ color: '#E4EAE6' }}>{speedMultiplier}x</strong>
               </span>
               {liveCWASASF && (
-                <span style={{ backgroundColor: '#052e16', padding: '4px 10px', borderRadius: '6px', color: '#4ade80', fontFamily: 'monospace', fontWeight: 'bold', border: '1px solid #22c55e' }}>
+                <span style={{ backgroundColor: '#242A27', padding: '4px 10px', borderRadius: '8px', color: '#A3CBB7', fontFamily: 'monospace', fontWeight: '700', border: '1px solid #3A443F' }}>
                   Frame: {liveCWASASF}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Sentence Sequence Token Strip */}
           {activeSequence.length > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                gap: '6px',
-                overflowX: 'auto',
-                paddingTop: '2px',
-                scrollbarWidth: 'none'
-              }}
-            >
+            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingTop: '2px' }}>
               {activeSequence.map((tok, idx) => {
                 const isCurrent = idx === activeTokenIndex && isPlaying;
                 const isPast = idx < activeTokenIndex || (!isPlaying && activeTokenIndex === activeSequence.length - 1);
@@ -705,23 +685,13 @@ export default function Translate() {
                     key={idx}
                     style={{
                       padding: '4px 10px',
-                      borderRadius: '6px',
+                      borderRadius: '8px',
                       fontSize: '12px',
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                       whiteSpace: 'nowrap',
-                      backgroundColor: isCurrent
-                        ? '#16a34a'
-                        : isPast
-                        ? 'rgba(34, 197, 94, 0.25)'
-                        : 'rgba(255,255,255,0.1)',
-                      color: isCurrent ? '#ffffff' : isPast ? '#86efac' : '#cbd5e1',
-                      border: isCurrent
-                        ? '1.5px solid #4ade80'
-                        : isPast
-                        ? '1px solid #22c55e'
-                        : '1px solid rgba(255,255,255,0.15)',
-                      boxShadow: isCurrent ? '0 0 10px #22c55e' : 'none',
-                      transition: 'all 0.2s'
+                      backgroundColor: isCurrent ? '#7CA992' : isPast ? 'rgba(124,169,146,0.2)' : '#242A27',
+                      color: isCurrent ? '#0D1310' : isPast ? '#A3CBB7' : '#B5C5BC',
+                      border: isCurrent ? '1px solid #7CA992' : '1px solid #3A443F'
                     }}
                   >
                     {tok.label}
@@ -732,36 +702,6 @@ export default function Translate() {
           )}
         </div>
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.6; }
-          100% { opacity: 1; }
-        }
-        @keyframes pulse-mic {
-          0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-          70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        @keyframes fade {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-        .spinner {
-          display: inline-block;
-          width: 16px;
-          height: 16px;
-          border: 3px solid rgba(255,255,255,0.3);
-          border-radius: 50%;
-          border-top-color: white;
-          animation: spin 1s ease-in-out infinite;
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-
     </div>
   );
 }

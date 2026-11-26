@@ -6,7 +6,6 @@ import { playSiGMLFast, resolveSigmlPath, fetchAndCacheSiGML } from '../utils/si
 export default function Practice() {
   const iframeRef = useRef(null);
 
-  // App States: 'setup' -> 'playing' -> 'gameover' -> 'history'
   const [practiceState, setPracticeState] = useState('setup');
   const [selectedTotal, setSelectedTotal] = useState(10);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -14,15 +13,13 @@ export default function Practice() {
   const [currentWord, setCurrentWord] = useState(null);
   const [nextWord, setNextWord] = useState(null);
   const [isRevealed, setIsRevealed] = useState(false);
-  
-  // Local session tracking
+
   const [sessionCorrect, setSessionCorrect] = useState(0);
   const [sessionTotal, setSessionTotal] = useState(0);
   const [history, setHistory] = useState([]);
   const [liveGloss, setLiveGloss] = useState('');
   const [liveFrame, setLiveFrame] = useState('');
 
-  // 1. Flatten the JSON data & categorize
   const { allWords, categoryMap } = useMemo(() => {
     const list = [];
     const catMap = { all: [] };
@@ -32,7 +29,7 @@ export default function Practice() {
         const catKey = category.toLowerCase().trim();
         if (!catMap[catKey]) catMap[catKey] = [];
 
-        modulesData[category].forEach(item => {
+        modulesData[category].forEach((item) => {
           if (item.type !== 'video' && item.label && item.file) {
             const enriched = { ...item, categoryName: category };
             list.push(enriched);
@@ -45,13 +42,11 @@ export default function Practice() {
     return { allWords: list, categoryMap: catMap };
   }, []);
 
-  // Filtered pool
   const activePool = useMemo(() => {
     const pool = categoryMap[selectedCategory] || allWords;
     return pool.length > 0 ? pool : allWords;
   }, [categoryMap, selectedCategory, allWords]);
 
-  // Load History
   useEffect(() => {
     try {
       const savedHistory = JSON.parse(localStorage.getItem('practiceHistory')) || [];
@@ -61,7 +56,6 @@ export default function Practice() {
     }
   }, []);
 
-  // Listen to CWASA updates from iframe (same-origin verified)
   useEffect(() => {
     const handleMessage = (e) => {
       if (e.origin && e.origin !== window.location.origin) return;
@@ -76,46 +70,54 @@ export default function Practice() {
 
   const getRandomWord = (list) => list[Math.floor(Math.random() * list.length)];
 
-  // Fast animation player via memory cache (< 1ms)
   const playAnimation = useCallback((wordItem) => {
     if (!wordItem || !iframeRef.current) return;
     const resolved = resolveSigmlPath(wordItem.file);
     playSiGMLFast(iframeRef.current, resolved);
   }, []);
 
-  // Flashcard generator with prefetching of upcoming card
   const prepareCard = useCallback((wordToUse = null) => {
     setIsRevealed(false);
     const pool = activePool.length > 0 ? activePool : allWords;
     const card = wordToUse || getRandomWord(pool);
     setCurrentWord(card);
-
-    // Play instantly
     playAnimation(card);
 
-    // Prefetch the NEXT card's SiGML in memory cache
     const upcoming = getRandomWord(pool);
     setNextWord(upcoming);
     fetchAndCacheSiGML(resolveSigmlPath(upcoming.file)).catch(() => {});
   }, [activePool, allWords, playAnimation]);
 
-  // Start Practice Session (Instantaneous, 0ms latency)
   const startPractice = (totalCards) => {
     setSelectedTotal(totalCards);
     setSessionCorrect(0);
     setSessionTotal(0);
     setPracticeState('playing');
-    
-    // Generate card immediately
     prepareCard();
   };
 
-  // Handle Reveal (Instantaneous)
   const handleReveal = useCallback(() => {
     setIsRevealed(true);
   }, []);
 
-  // Handle Self Evaluation & Next Card Transition
+  const handleGameOver = (finalCorrect, finalTotal) => {
+    setPracticeState('gameover');
+
+    const newRecord = {
+      id: Date.now(),
+      date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      score: finalCorrect,
+      total: finalTotal
+    };
+
+    setHistory((prev) => {
+      const updated = [newRecord, ...prev];
+      localStorage.setItem('practiceHistory', JSON.stringify(updated));
+      return updated;
+    });
+    updateStreak();
+  };
+
   const handleSelfEvaluation = useCallback((isCorrect) => {
     const newCorrect = isCorrect ? sessionCorrect + 1 : sessionCorrect;
     const newTotal = sessionTotal + 1;
@@ -130,26 +132,6 @@ export default function Practice() {
     }
   }, [sessionCorrect, sessionTotal, selectedTotal, nextWord, prepareCard]);
 
-  // Game Over Logic
-  const handleGameOver = (finalCorrect, finalTotal) => {
-    setPracticeState('gameover');
-    
-    const newRecord = {
-      id: Date.now(),
-      date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      score: finalCorrect,
-      total: finalTotal
-    };
-    
-    setHistory(prev => {
-      const updated = [newRecord, ...prev];
-      localStorage.setItem('practiceHistory', JSON.stringify(updated));
-      return updated;
-    });
-    updateStreak();
-  };
-
-  // Keyboard Shortcuts (Space to reveal, 1/Y for Yes, 2/N for No, R for Replay)
   useEffect(() => {
     if (practiceState !== 'playing') return;
 
@@ -161,14 +143,12 @@ export default function Practice() {
           e.preventDefault();
           handleReveal();
         }
-      } else {
-        if (e.key === '1' || e.key.toLowerCase() === 'y') {
-          e.preventDefault();
-          handleSelfEvaluation(true);
-        } else if (e.key === '2' || e.key.toLowerCase() === 'n') {
-          e.preventDefault();
-          handleSelfEvaluation(false);
-        }
+      } else if (e.key === '1' || e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleSelfEvaluation(true);
+      } else if (e.key === '2' || e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleSelfEvaluation(false);
       }
 
       if (e.key.toLowerCase() === 'r' && currentWord) {
@@ -182,60 +162,56 @@ export default function Practice() {
   }, [practiceState, isRevealed, handleReveal, handleSelfEvaluation, currentWord, playAnimation]);
 
   const clearHistory = () => {
-    if (window.confirm("Clear all practice history?")) {
-      setHistory([]);
-      localStorage.removeItem('practiceHistory');
-    }
+    setHistory([]);
+    localStorage.removeItem('practiceHistory');
   };
 
   return (
-    <div 
+    <div
       className="signverse-split-container"
       style={{
         display: 'flex',
         flex: 1,
         width: '100%',
-        height: 'calc(100vh - 56px)',
+        height: 'calc(100vh - 64px)',
         overflow: 'hidden',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        backgroundColor: '#f8fafc',
+        fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        backgroundColor: '#191C1A',
+        color: '#E4EAE6',
         position: 'relative'
       }}
     >
-      
-      {/* Left Panel: Practice Interface */}
-      <div 
+      {/* Left Panel */}
+      <div
         className="signverse-panel-left"
         style={{
           width: '45%',
           height: '100%',
           padding: '24px 28px',
-          backgroundColor: '#ffffff',
+          backgroundColor: '#1F2421',
           overflowY: 'auto',
           overflowX: 'hidden',
-          borderRight: '2px solid #e2e8f0',
+          borderRight: '1px solid #2D3531',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          boxSizing: 'border-box'
         }}
       >
-        
-        {/* --- SETUP SCREEN --- */}
         {practiceState === 'setup' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <h1 style={{ color: '#003366', fontSize: '28px', marginBottom: '8px', fontWeight: '800' }}>
-              🎯 Flashcard Practice
+            <h1 style={{ color: '#E4EAE6', fontSize: '26px', marginBottom: '8px', fontWeight: '800' }}>
+              Flashcard Practice
             </h1>
-            <p style={{ color: '#64748b', fontSize: '14.5px', marginBottom: '18px' }}>
-              Practice at your own pace! Watch the sign, guess the word, reveal answer, and self-evaluate. Zero latency response.
+            <p style={{ color: '#B5C5BC', fontSize: '14px', marginBottom: '20px', lineHeight: '1.5' }}>
+              Watch the 3D sign, recall the word mentally, reveal the gloss, and honestly self-evaluate.
             </p>
 
-            {/* Category Filter Pills */}
             <div style={{ marginBottom: '20px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '8px' }}>
-                CHOOSE PRACTICE VOCABULARY:
+              <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#A3CBB7', display: 'block', marginBottom: '8px', letterSpacing: '0.6px' }}>
+                CHOOSE PRACTICE VOCABULARY
               </span>
               <div role="group" aria-label="Choose practice vocabulary" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {Object.keys(categoryMap).slice(0, 8).map(cat => {
+                {Object.keys(categoryMap).slice(0, 8).map((cat) => {
                   const isSel = selectedCategory === cat;
                   return (
                     <button
@@ -245,15 +221,14 @@ export default function Practice() {
                       onClick={() => setSelectedCategory(cat)}
                       style={{
                         padding: '6px 12px',
-                        borderRadius: '20px',
-                        border: isSel ? '2px solid #16a34a' : '1px solid #cbd5e1',
-                        backgroundColor: isSel ? '#16a34a' : '#f8fafc',
-                        color: isSel ? '#ffffff' : '#334155',
+                        borderRadius: '10px',
+                        border: isSel ? '1.5px solid #7CA992' : '1px solid #3A443F',
+                        backgroundColor: isSel ? '#7CA992' : '#242A27',
+                        color: isSel ? '#0D1310' : '#B5C5BC',
                         fontSize: '12px',
                         fontWeight: '700',
                         cursor: 'pointer',
-                        textTransform: 'capitalize',
-                        transition: 'all 0.15s ease'
+                        textTransform: 'capitalize'
                       }}
                     >
                       {cat} ({categoryMap[cat]?.length || 0})
@@ -263,54 +238,66 @@ export default function Practice() {
               </div>
             </div>
 
-            {/* Card Count Selection */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '22px' }}>
-              {[5, 10, 15, 20, 30, 50].map(num => (
+              {[5, 10, 15, 20, 30, 50].map((num) => (
                 <button
+                  type="button"
                   key={num}
                   onClick={() => startPractice(num)}
                   style={{
-                    padding: '16px', backgroundColor: '#f8fafc', border: '2px solid #16a34a', 
-                    borderRadius: '10px', fontSize: '16px', fontWeight: '800', color: '#15803d',
-                    cursor: 'pointer', transition: 'all 0.15s ease', outline: 'none',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px'
+                    padding: '16px 10px',
+                    backgroundColor: '#242A27',
+                    border: '1.5px solid #7CA992',
+                    borderRadius: '12px',
+                    fontSize: '16px',
+                    fontWeight: '800',
+                    color: '#E4EAE6',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px'
                   }}
-                  onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#ecfdf5'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.transform = 'translateY(0)'; }}
                 >
                   <span>{num} Cards</span>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>Self-Paced</span>
+                  <span style={{ fontSize: '11px', color: '#A3CBB7', fontWeight: '600' }}>Self-Paced</span>
                 </button>
               ))}
             </div>
 
             {history.length > 0 && (
-              <button 
+              <button
+                type="button"
                 onClick={() => setPracticeState('history')}
                 style={{
-                  width: '100%', padding: '12px', backgroundColor: 'transparent', border: '2px solid #003366',
-                  color: '#003366', borderRadius: '8px', fontSize: '15px', fontWeight: '700', cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: 'transparent',
+                  border: '1px solid #3A443F',
+                  color: '#E4EAE6',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
                 }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#f0f4f8'}
-                onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
               >
-                📜 View Practice History ({history.length} sessions)
+                View Practice History ({history.length} sessions)
               </button>
             )}
           </div>
         )}
 
-        {/* --- HISTORY SCREEN --- */}
         {practiceState === 'history' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ color: '#003366', margin: '0 0 16px 0', fontSize: '24px', fontWeight: '800' }}>Self-Evaluation History</h2>
-            
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#fafafa', marginBottom: '16px' }}>
+            <h2 style={{ color: '#E4EAE6', margin: '0 0 16px 0', fontSize: '22px', fontWeight: '800' }}>
+              Self-Evaluation History
+            </h2>
+
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #2D3531', borderRadius: '12px', padding: '12px', backgroundColor: '#191C1A', marginBottom: '16px' }}>
               {history.map((record) => (
-                <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #f1f5f9', fontSize: '14.5px' }}>
-                  <span style={{ color: '#475569' }}>{record.date}</span>
-                  <span style={{ fontWeight: '800', color: (record.score / record.total) >= 0.7 ? '#16a34a' : '#d97706' }}>
+                <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 6px', borderBottom: '1px solid #242A27', fontSize: '14px' }}>
+                  <span style={{ color: '#9CAEA4' }}>{record.date}</span>
+                  <span style={{ fontWeight: '800', color: record.score / record.total >= 0.7 ? '#7CA992' : '#FCD34D' }}>
                     Knew {record.score} of {record.total} ({Math.round((record.score / record.total) * 100)}%)
                   </span>
                 </div>
@@ -318,128 +305,177 @@ export default function Practice() {
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
+              <button
+                type="button"
                 onClick={clearHistory}
-                style={{ flex: 1, padding: '12px', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}
+                style={{ flex: 1, padding: '12px', backgroundColor: '#3B1E1E', color: '#FECACA', border: '1px solid #7F1D1D', borderRadius: '10px', cursor: 'pointer', fontWeight: '700' }}
               >
-                🗑️ Clear History
+                Clear History
               </button>
-              <button 
+              <button
+                type="button"
                 onClick={() => setPracticeState('setup')}
-                style={{ flex: 1, padding: '12px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}
+                style={{ flex: 1, padding: '12px', backgroundColor: '#7CA992', color: '#0D1310', border: 'none', borderRadius: '10px', fontSize: '14.5px', fontWeight: '800', cursor: 'pointer' }}
               >
-                🔙 Back to Setup
+                Back to Setup
               </button>
             </div>
           </div>
         )}
 
-        {/* --- PLAYING SCREEN --- */}
         {practiceState === 'playing' && (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h2 style={{ color: '#003366', margin: 0, fontSize: '20px', fontWeight: '800' }}>Active Practice</h2>
-              <div style={{ backgroundColor: '#f0fdf4', padding: '6px 14px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                <span style={{ fontSize: '14px', fontWeight: '800', color: '#166534' }}>
+              <h2 style={{ color: '#E4EAE6', margin: 0, fontSize: '20px', fontWeight: '800' }}>Active Practice</h2>
+              <div style={{ backgroundColor: 'rgba(124,169,146,0.16)', padding: '6px 14px', borderRadius: '10px', border: '1px solid rgba(124,169,146,0.35)' }}>
+                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#A3CBB7' }}>
                   Card {sessionTotal + 1} of {selectedTotal}
                 </span>
               </div>
             </div>
-            
-            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '16px' }}>
-              Guess the sign in your mind. Then reveal the answer! Use <kbd style={{ padding: '2px 5px', background: '#e2e8f0', borderRadius: '4px', fontWeight: '700' }}>Space</kbd> to reveal.
+
+            <p style={{ color: '#B5C5BC', fontSize: '13.5px', marginBottom: '16px' }}>
+              Guess the sign in your mind, then press <kbd style={{ padding: '2px 6px', background: '#242A27', border: '1px solid #3A443F', borderRadius: '4px', fontWeight: '700', color: '#E4EAE6' }}>Space</kbd> to reveal.
             </p>
 
-            <button 
+            <button
+              type="button"
               onClick={() => playAnimation(currentWord)}
-              style={{ 
-                width: '100%', padding: '10px', backgroundColor: '#f59e0b', color: 'white', 
-                border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '700', 
-                cursor: 'pointer', marginBottom: '20px', outline: 'none', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', gap: '8px',
-                boxShadow: '0 2px 6px rgba(245,158,11,0.25)'
+              style={{
+                width: '100%',
+                padding: '10px',
+                backgroundColor: '#242A27',
+                color: '#E4EAE6',
+                border: '1px solid #3A443F',
+                borderRadius: '10px',
+                fontSize: '13.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                marginBottom: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
               }}
             >
-              <span>🔄 Replay Animation</span>
-              <span style={{ fontSize: '11px', opacity: 0.8 }}>(Press 'R')</span>
+              <span>Replay Animation</span>
+              <span style={{ fontSize: '11px', color: '#9CAEA4' }}>(Press R)</span>
             </button>
 
-            {/* Flashcard Box */}
-            <div style={{ 
-              flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', 
-              alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: '14px', 
-              border: '2px dashed #cbd5e1', padding: '24px', textAlign: 'center' 
-            }}>
-              
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: '#191C1A',
+                borderRadius: '14px',
+                border: '1px dashed #3A443F',
+                padding: '24px',
+                textAlign: 'center'
+              }}
+            >
               {!isRevealed ? (
                 <>
-                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>🤔</div>
-                  <h3 style={{ color: '#334155', margin: '0 0 8px 0', fontSize: '18px', fontWeight: '800' }}>
+                  <div aria-hidden="true" style={{ fontSize: '36px', marginBottom: '10px' }}>🤟</div>
+                  <h3 style={{ color: '#E4EAE6', margin: '0 0 8px 0', fontSize: '18px', fontWeight: '800' }}>
                     What is the meaning of this sign?
                   </h3>
-                  <p style={{ color: '#64748b', fontSize: '13.5px', marginBottom: '22px' }}>
-                    Formulate your answer or fingerspell it in your mind first.
+                  <p style={{ color: '#9CAEA4', fontSize: '13.5px', marginBottom: '22px' }}>
+                    Formulate your answer mentally before revealing.
                   </p>
-                  <button 
+                  <button
+                    type="button"
                     onClick={handleReveal}
                     autoFocus
                     style={{
-                      padding: '14px 34px', backgroundColor: '#003366', color: 'white',
-                      border: 'none', borderRadius: '30px', fontSize: '16px', fontWeight: '800',
-                      cursor: 'pointer', outline: 'none', display: 'flex', alignItems: 'center',
-                      gap: '8px', boxShadow: '0 4px 12px rgba(0,51,102,0.25)'
+                      padding: '13px 30px',
+                      backgroundColor: '#7CA992',
+                      color: '#0D1310',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '15.5px',
+                      fontWeight: '800',
+                      cursor: 'pointer'
                     }}
                   >
-                    <span>👁️ Show Answer</span>
-                    <span style={{ fontSize: '12px', opacity: 0.8 }}>(Space ↵)</span>
+                    Show Answer (Space)
                   </button>
                 </>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                  <div style={{ 
-                    backgroundColor: '#ecfdf5', width: '100%', padding: '18px', borderRadius: '10px', 
-                    border: '2px solid #10b981', marginBottom: '20px', boxShadow: '0 2px 8px rgba(16,185,129,0.15)' 
-                  }}>
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#059669', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>
-                       SIGN MEANING / GLOSS
+                  <div
+                    style={{
+                      backgroundColor: '#242A27',
+                      width: '100%',
+                      padding: '18px',
+                      borderRadius: '12px',
+                      border: '1.5px solid #7CA992',
+                      marginBottom: '20px',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#7CA992', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '6px' }}>
+                      SIGN MEANING / GLOSS
                     </span>
-                    <h1 style={{ color: '#064e3b', margin: 0, fontSize: '32px', letterSpacing: '0.5px', fontWeight: '900', textTransform: 'capitalize' }}>
+                    <div style={{ color: '#E4EAE6', margin: 0, fontSize: '30px', fontWeight: '900', textTransform: 'capitalize' }}>
                       {currentWord?.label}
-                    </h1>
-                    <span style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                    </div>
+                    <span style={{ fontSize: '12px', color: '#9CAEA4', marginTop: '4px', display: 'block' }}>
                       Category: {currentWord?.categoryName || 'General'}
                     </span>
                   </div>
 
-                  <h4 style={{ color: '#1e293b', marginBottom: '14px', fontSize: '15px', fontWeight: '700' }}>
-                    Did you guess it right?
-                  </h4>
-                  
+                  <p style={{ color: '#E4EAE6', marginBottom: '12px', fontSize: '15px', fontWeight: '700' }}>
+                    Did you recall it accurately?
+                  </p>
+
                   <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => handleSelfEvaluation(true)}
                       autoFocus
                       style={{
-                        flex: 1, padding: '14px', backgroundColor: '#16a34a', color: 'white', 
-                        border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: '800', 
-                        cursor: 'pointer', outline: 'none', display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', gap: '2px', boxShadow: '0 2px 6px rgba(22,163,74,0.25)'
+                        flex: 1,
+                        padding: '13px',
+                        backgroundColor: '#7CA992',
+                        color: '#0D1310',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontSize: '14.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px'
                       }}
                     >
-                      <span>✅ Yes, I knew it!</span>
-                      <span style={{ fontSize: '11px', opacity: 0.8 }}>(Press '1' or 'Y')</span>
+                      <span>Yes, I knew it!</span>
+                      <span style={{ fontSize: '11px', opacity: 0.8 }}>(1 or Y)</span>
                     </button>
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => handleSelfEvaluation(false)}
                       style={{
-                        flex: 1, padding: '14px', backgroundColor: '#dc2626', color: 'white', 
-                        border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: '800', 
-                        cursor: 'pointer', outline: 'none', display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', gap: '2px', boxShadow: '0 2px 6px rgba(220,38,38,0.25)'
+                        flex: 1,
+                        padding: '13px',
+                        backgroundColor: '#3B1E1E',
+                        color: '#FECACA',
+                        border: '1px solid #7F1D1D',
+                        borderRadius: '10px',
+                        fontSize: '14.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px'
                       }}
                     >
-                      <span>❌ No, missed it.</span>
-                      <span style={{ fontSize: '11px', opacity: 0.8 }}>(Press '2' or 'N')</span>
+                      <span>No, missed it</span>
+                      <span style={{ fontSize: '11px', opacity: 0.85 }}>(2 or N)</span>
                     </button>
                   </div>
                 </div>
@@ -448,41 +484,48 @@ export default function Practice() {
           </>
         )}
 
-        {/* --- GAME OVER SCREEN --- */}
         {practiceState === 'gameover' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ textAlign: 'center', padding: '24px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1.5px solid #e2e8f0', marginBottom: '20px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '8px' }}>
+            <div style={{ textAlign: 'center', padding: '24px', backgroundColor: '#242A27', borderRadius: '14px', border: '1px solid #3A443F', marginBottom: '20px' }}>
+              <div aria-hidden="true" style={{ fontSize: '42px', marginBottom: '8px' }}>
                 {sessionCorrect / selectedTotal >= 0.7 ? '🌟' : '📚'}
               </div>
-              <h2 style={{ color: '#003366', margin: '0 0 8px 0', fontSize: '24px', fontWeight: '800' }}>
+              <h2 style={{ color: '#E4EAE6', margin: '0 0 8px 0', fontSize: '24px', fontWeight: '800' }}>
                 Practice Session Finished!
               </h2>
-              <p style={{ fontSize: '16px', color: '#475569', margin: '0 0 12px 0' }}>
-                You honestly knew <strong style={{ color: '#16a34a', fontSize: '22px' }}>{sessionCorrect}</strong> out of {selectedTotal} signs ({Math.round((sessionCorrect / selectedTotal) * 100)}%).
+              <p style={{ fontSize: '15.5px', color: '#B5C5BC', margin: '0 0 12px 0' }}>
+                You knew <strong style={{ color: '#7CA992', fontSize: '20px' }}>{sessionCorrect}</strong> out of {selectedTotal} signs ({Math.round((sessionCorrect / selectedTotal) * 100)}%).
               </p>
-              <div style={{ display: 'inline-block', backgroundColor: '#dcfce7', color: '#15803d', padding: '4px 14px', borderRadius: '20px', fontSize: '12.5px', fontWeight: '700' }}>
-                Mastery Rate: {Math.round((sessionCorrect / selectedTotal) * 100)}%
+              <div style={{ display: 'inline-block', backgroundColor: 'rgba(124,169,146,0.16)', color: '#A3CBB7', border: '1px solid rgba(124,169,146,0.35)', padding: '4px 14px', borderRadius: '12px', fontSize: '12.5px', fontWeight: '700' }}>
+                Recall Rate: {Math.round((sessionCorrect / selectedTotal) * 100)}%
               </div>
             </div>
 
-            <button 
+            <button
+              type="button"
               onClick={() => setPracticeState('setup')}
               style={{
-                width: '100%', padding: '14px', backgroundColor: '#16a34a', color: 'white',
-                border: 'none', borderRadius: '10px', fontSize: '16px', fontWeight: '800',
-                cursor: 'pointer', marginBottom: '20px'
+                width: '100%',
+                padding: '13px',
+                backgroundColor: '#7CA992',
+                color: '#0D1310',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '15.5px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                marginBottom: '20px'
               }}
             >
-              🔄 Practice Another Batch
+              Practice Another Batch
             </button>
 
-            <h3 style={{ margin: '0 0 10px 0', color: '#334155', fontSize: '15px', fontWeight: '700' }}>Recent Practice Sessions</h3>
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', backgroundColor: '#fafafa' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: '#B5C5BC', fontSize: '14.5px', fontWeight: '700' }}>Recent Practice Sessions</h3>
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #2D3531', borderRadius: '10px', padding: '10px', backgroundColor: '#191C1A' }}>
               {history.slice(0, 6).map((record) => (
-                <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '13.5px' }}>
-                  <span style={{ color: '#64748b' }}>{record.date}</span>
-                  <span style={{ fontWeight: '800', color: '#16a34a' }}>
+                <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', borderBottom: '1px solid #242A27', fontSize: '13.5px' }}>
+                  <span style={{ color: '#9CAEA4' }}>{record.date}</span>
+                  <span style={{ fontWeight: '800', color: '#7CA992' }}>
                     {record.score} / {record.total} Correct
                   </span>
                 </div>
@@ -492,44 +535,28 @@ export default function Practice() {
         )}
       </div>
 
-      {/* Right Panel: Avatar Viewer with Bottom Gloss HUD & Guess First Shield */}
-      <div 
+      {/* Right Panel: 3D Avatar Viewer */}
+      <div
         className="signverse-panel-right"
         style={{
           width: '55%',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#e5e7eb',
+          backgroundColor: '#191C1A',
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        {/* Avatar Viewport Frame (Upper section taking full area) */}
-        <div 
+        <div
           className="signverse-avatar-frame"
-          style={{
-            flex: 1,
-            width: '100%',
-            height: '100%',
-            position: 'relative',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: '#e5e7eb'
-          }}
+          style={{ flex: 1, width: '100%', height: '100%', position: 'relative', backgroundColor: '#191C1A' }}
         >
-          <iframe 
-            ref={iframeRef} 
-            src="/player-applet.html" 
+          <iframe
+            ref={iframeRef}
+            src="/player-applet.html"
             title="CWASA Avatar Player"
-            className="signverse-avatar-iframe"
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              display: 'block'
-            }}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
             onLoad={() => {
               if (practiceState === 'playing' && currentWord) {
                 playAnimation(currentWord);
@@ -538,102 +565,74 @@ export default function Practice() {
           />
         </div>
 
-        {/* Right Panel BOTTOM Details & Gloss HUD (Green Theme with Times New Roman) */}
         <div
           style={{
             position: 'relative',
             padding: '14px 20px',
-            background: 'linear-gradient(180deg, #052e16 0%, #14532d 100%)',
-            color: '#ffffff',
-            borderTop: '3px solid #22c55e',
+            backgroundColor: '#141715',
+            color: '#E4EAE6',
+            borderTop: '1px solid #2D3531',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '12px',
-            zIndex: 10,
-            boxShadow: '0 -4px 14px rgba(0,0,0,0.25)',
-            fontFamily: '"Times New Roman", Times, serif',
             minHeight: '64px',
             boxSizing: 'border-box'
           }}
         >
-          {/* Active Gloss Badge */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#86efac', textTransform: 'uppercase', letterSpacing: '1px' }}>
-              SIGN GLOSS:
+            <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#7CA992', textTransform: 'uppercase' }}>
+              Sign Gloss
             </span>
             <span
               style={{
-                backgroundColor: 'rgba(34, 197, 94, 0.25)',
-                color: '#4ade80',
-                border: '1.5px solid #22c55e',
-                padding: '4px 16px',
+                backgroundColor: 'rgba(124,169,146,0.16)',
+                color: '#A3CBB7',
+                border: '1px solid rgba(124,169,146,0.35)',
+                padding: '4px 14px',
                 borderRadius: '8px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                letterSpacing: '1px',
-                fontFamily: '"Times New Roman", Times, serif'
+                fontSize: '16px',
+                fontWeight: '800'
               }}
             >
-              {isRevealed || practiceState !== 'playing' ? (liveGloss || currentWord?.label?.toUpperCase() || 'READY') : '???'}
+              {isRevealed || practiceState !== 'playing' ? (liveGloss || currentWord?.label?.toUpperCase() || 'READY') : 'HIDDEN'}
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
-            <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '5px 12px', borderRadius: '6px', color: '#dcfce7', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-              Mode: <strong style={{ color: '#ffffff' }}>Flashcard Practice</strong>
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12.5px' }}>
             {isRevealed && currentWord && (
-              <span style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '5px 12px', borderRadius: '6px', color: '#86efac', fontFamily: 'monospace', fontSize: '12px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+              <span style={{ backgroundColor: '#242A27', padding: '5px 10px', borderRadius: '8px', color: '#A3CBB7', fontFamily: 'monospace', border: '1px solid #3A443F' }}>
                 {resolveSigmlPath(currentWord.file)}
               </span>
             )}
             {liveFrame && (
-              <span style={{ backgroundColor: '#052e16', padding: '5px 10px', borderRadius: '6px', color: '#4ade80', fontFamily: 'monospace', fontWeight: 'bold', border: '1px solid #22c55e' }}>
+              <span style={{ backgroundColor: '#242A27', padding: '5px 10px', borderRadius: '8px', color: '#A3CBB7', fontFamily: 'monospace', border: '1px solid #3A443F' }}>
                 Frame: {liveFrame}
               </span>
             )}
           </div>
 
-          {/* GUESS FIRST Box Overlay - hides the details while card is unrevealed */}
           {practiceState === 'playing' && !isRevealed && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              backgroundColor: '#052e16',
-              borderTop: '3px solid #22c55e',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 25,
-              boxShadow: '0 -4px 14px rgba(0,0,0,0.3)'
-            }}>
-              <div style={{
-                backgroundColor: '#14532d',
-                border: '2px solid #22c55e',
-                padding: '8px 28px',
-                borderRadius: '8px',
-                color: '#4ade80',
-                fontSize: '17px',
-                fontWeight: 'bold',
-                letterSpacing: '2px',
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundColor: '#141715',
+                borderTop: '1px solid #7CA992',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                fontFamily: '"Times New Roman", Times, serif',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.3)'
-              }}>
-                <span>🤔 GUESS FIRST! (Press Space to Reveal)</span>
-              </div>
+                justifyContent: 'center',
+                zIndex: 25
+              }}
+            >
+              <span style={{ color: '#A3CBB7', fontSize: '14px', fontWeight: '800', letterSpacing: '1px' }}>
+                GLOSS HIDDEN — PRESS SPACE TO REVEAL
+              </span>
             </div>
           )}
         </div>
       </div>
-
     </div>
   );
-}
+}

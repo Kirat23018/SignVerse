@@ -116,6 +116,9 @@ export default function Login({ setIsAuthenticated }) {
         <div style={{ marginTop: '25px', fontSize: '14px', color: '#B5C5BC' }}>
           Don&apos;t have an account? <Link to="/signup" style={{ color: '#A3C7B5', fontWeight: '700', textDecoration: 'none' }}>Sign Up</Link>
         </div>
+        <p style={{ marginTop: '12px', fontSize: '11.5px', color: '#85968C' }}>
+          Local demo session mode — profile state is stored in your browser.
+        </p>
       </div>
     </div>
   );

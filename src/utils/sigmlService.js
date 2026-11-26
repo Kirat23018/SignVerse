@@ -129,6 +129,28 @@ export async function playSiGMLFast(iframeElement, fileOrItem, speedMultiplier =
   return true;
 }
 
+// Stop any active avatar animation inside the CWASA iframe
+export function stopSiGML(iframeElement) {
+  if (!iframeElement || !iframeElement.contentWindow) return false;
+  const cw = iframeElement.contentWindow;
+  const targetOrigin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '*';
+  try {
+    if (typeof cw.stopPlayer === 'function') {
+      cw.stopPlayer();
+    } else {
+      cw.postMessage({ type: 'STOP_SIGML' }, targetOrigin);
+    }
+    return true;
+  } catch {
+    try {
+      cw.postMessage({ type: 'STOP_SIGML' }, targetOrigin);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 // Flattened, validated vocabulary database with O(1) Map
 let cachedFlatList = null;
 let cachedLookupMap = null;
@@ -186,14 +208,37 @@ export function getQuizVocabulary() {
 export function startBackgroundPrefetch() {
   if (typeof window === 'undefined') return;
 
-  const commonSigns = [
-    'hello', 'thankyou', 'please', 'help', 'family', 'father', 'mother',
-    'brother', 'sister', 'friend', 'happy', 'goodmorning', 'howareyou',
-    'good', 'bad', 'yes', 'no', 'food', 'water', 'name', 'apple', 'banana',
-    'welcome', 'today', 'tomorrow', 'time', 'school', 'book', 'home'
+  const prefetchQueue = [
+    'SignFiles/hello.sigml',
+    'SignFiles/thankyou.sigml',
+    'SignFiles/please.sigml',
+    'SignFiles/help.sigml',
+    'SignFiles/family.sigml',
+    'SignFiles/father.sigml',
+    'SignFiles/mother.sigml',
+    'SignFiles/brother.sigml',
+    'SignFiles/sister.sigml',
+    'SignFiles/friend.sigml',
+    'SignFiles/happy.sigml',
+    'SignFiles/goodmorning.sigml',
+    'SignFiles/howareyou.sigml',
+    'SignFiles/good.sigml',
+    'SignFiles/bad.sigml',
+    'SignFiles/yes.sigml',
+    'SignFiles/no.sigml',
+    'DictionarySigns/dishes_and_spices/food.sigml',
+    'DictionarySigns/things_on_earth/water.sigml',
+    'SignFiles/namewhat.sigml',
+    'SignFiles/apple.sigml',
+    'SignFiles/banana.sigml',
+    'DictionarySigns/verbs/welcome.sigml',
+    'SignFiles/today.sigml',
+    'SignFiles/tomorrow.sigml',
+    'SignFiles/time.sigml',
+    'DictionarySigns/educational_terms/school.sigml',
+    'SignFiles/book.sigml',
+    'DictionarySigns/household_articles/home.sigml'
   ];
-
-  const prefetchQueue = commonSigns.map((s) => `SignFiles/${s}.sigml`);
 
   const runIdle = () => {
     let index = 0;

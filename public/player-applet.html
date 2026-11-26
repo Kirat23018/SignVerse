@@ -52,16 +52,76 @@
 
 </head>
 
-<body onload="CWASA.init(initCfg);" >
+<body onload="initSignVerseAvatar();" >
 
 <script language="javascript">
+
+var VALID_AVATARS = ["luna", "siggi", "anna", "marc", "francoise"];
+
+function notifyParent(payload) {
+	if (window.parent && window.parent !== window) {
+		window.parent.postMessage(payload, window.location.origin);
+	}
+}
+
+function initSignVerseAvatar() {
+	if (typeof CWASA === "undefined" || typeof CWASA.init !== "function") {
+		notifyParent({
+			type: "CWASA_STATUS",
+			status: "error",
+			message: "3D Avatar engine (CWASA) could not load. Check internet connection for WebGL assets."
+		});
+		return;
+	}
+	try {
+		CWASA.init(initCfg);
+		notifyParent({ type: "CWASA_STATUS", status: "ready", avatar: initCfg.avSettings.initAv });
+	} catch (e) {
+		notifyParent({
+			type: "CWASA_STATUS",
+			status: "error",
+			message: "3D Avatar WebGL initialization failed on this device."
+		});
+	}
+}
+
+function setAvatar(avatarName) {
+	if (typeof avatarName !== "string") return;
+	var clean = avatarName.trim().toLowerCase();
+	if (VALID_AVATARS.indexOf(clean) === -1) return;
+	try {
+		var avSelect = document.querySelector(".CWASAAvMenu select");
+		if (avSelect) {
+			avSelect.value = clean;
+			avSelect.dispatchEvent(new Event("change", { bubbles: true }));
+		} else if (typeof CWASA !== "undefined" && typeof CWASA.setAvatar === "function") {
+			CWASA.setAvatar(clean, 0);
+		}
+		notifyParent({ type: "CWASA_STATUS", status: "avatar_changed", avatar: clean });
+	} catch (e) {
+		console.warn("Avatar switch error:", e);
+	}
+}
 
 function playText(stext) {
 	if (!stext) return;
 	try {
+		if (typeof CWASA === "undefined" || typeof CWASA.playSiGMLText !== "function") {
+			notifyParent({
+				type: "CWASA_STATUS",
+				status: "error",
+				message: "3D Avatar player unavailable."
+			});
+			return;
+		}
 		CWASA.playSiGMLText(stext);
 	} catch (e) {
 		console.warn("CWASA playText error:", e);
+		notifyParent({
+			type: "CWASA_STATUS",
+			status: "error",
+			message: "Could not play this sign sequence on the 3D avatar."
+		});
 	}
 }
 
@@ -138,8 +198,15 @@ function startPlayer(sigmlURL) {
 		})
 		.catch(function(err) {
 			console.warn("Fetch SiGML fallback:", err);
+			notifyParent({
+				type: "CWASA_STATUS",
+				status: "warning",
+				message: "Animation asset unavailable for " + sigmlURL
+			});
 			try {
-				CWASA.playSiGMLURL(fullUrl);
+				if (typeof CWASA !== "undefined" && typeof CWASA.playSiGMLURL === "function") {
+					CWASA.playSiGMLURL(fullUrl);
+				}
 			} catch (e) {
 				console.warn("CWASA playSiGMLURL fallback error:", e);
 			}
@@ -172,6 +239,8 @@ window.addEventListener('message', function(event) {
 			if (isSafeSigmlPath(file)) startPlayer(file);
 		} else if (data.type === "STOP_PLAYER" || data.type === "STOP_SIGML") {
 			stopPlayer();
+		} else if (data.type === "SET_AVATAR") {
+			setAvatar(data.avatar);
 		} else if (data.type === "PLAY_TEXT") {
 			if (typeof data.text === "string" && data.text.indexOf("<sigml") !== -1) {
 				playText(data.text);

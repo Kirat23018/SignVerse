@@ -1,65 +1,53 @@
-# SignDum 🤟 - Next-Gen 3D Sign Language Platform
+# SignVerse — Interactive 3D Sign Language & Vision Accessibility Platform
 
-SignVerse is an interactive, accessible 3D Sign Language translation and learning platform powered by WebGL avatar synthesis, offline synonym matching, real-time gesture pipelines, and AI conversational assistance.
-
----
-
-## 🌟 Key Features
-
-- **🤖 3D Avatar Sign Synthesizer**: Smooth 3D animation of characters (Luna, Marc, Francoise, Anna, Siggi) translating English sentences into British Sign Language (BSL) / Indian Sign Language (ISL) gestures using SiGML notation and CWASA WebGL engine.
-- **🎙️ Real-Time Voice & Speech Translation**: Speak directly into the microphone with instant offline fallback & $O(1)$ fast word/synonym resolution.
-- **🔤 Interactive Fingerspelling Studio**: Learn and practice the complete A–Z sign language alphabet with instant animation playback and keyboard navigation.
-- **📖 12,000+ Word Dictionary**: Instant search through comprehensive vocabulary categories (Family, Greetings, Numbers, Emergency, Animals, etc.).
-- **🃏 Gamified Flashcards & Practice**: Self-evaluation practice cards with anti-cheating visual masks to solidify retention.
-- **⚡ 60-Second Timed Quiz Arena**: Speed quizzes with live scoring, accuracy metrics, and interactive rank roadmap progression.
-- **✨ SignBot LLM Assistant**: Multimodal floating AI conversational bot powered by Groq (Llama-3.3 70B) and Google Gemini 1.5 Flash with Text-to-Speech playback.
-- **📱 Universal Multi-Device Responsiveness**: Adaptive layouts for mobile, tablet, and desktop screens with a hamburger drawer navbar and top-positioned 3D avatar viewport on mobile.
+SignVerse is a web-based accessibility platform converting English text and speech into 3D Sign Language animations (SiGML / CWASA WebGL) alongside in-browser MediaPipe 21-landmark hand sign recognition and structured learning modules.
 
 ---
 
-## 🚀 Tech Stack
+## Key Features
 
-- **Frontend**: React 18, Vite, React Router DOM v6, Vanilla CSS3 (Custom Responsive Design System)
-- **3D Engine**: WebGL Avatar Synthesizer (CWASA - Coffee Web Audio & Sign Animation)
-- **AI / LLM Integration**: Groq API (Llama-3.3 70B Versatile), Google Gemini 1.5 Flash
-- **Web APIs**: Web Speech Recognition API, Web Speech Synthesis (TTS), Web Storage (Local Persistence)
+- **Text & Voice to ISL 3D Translator (`/translate`)**: Rule-based English-to-ISL gloss approximation (SOV/Topic-Comment reordering, clause-final WH/negation, synonym resolution, and fingerspelling fallback with explicit linguistic approximation disclosure), multi-avatar selector (`Luna`, `Marc`, `Anna`, `Francoise`, `Siggi`), adjustable speed (`0.8x`–`2.2x`), and immediate Stop control.
+- **2,770-Sign 3D Vocabulary & A–Z Fingerspelling (`/words`, `/alphabets`)**: Instant client-side SiGML XML cache, double-handed (ISL) and single-handed alphabets, and keyboard navigation.
+- **LiveCam Vision Studio (`/sign-to-text`)**: Real-time in-browser MediaPipe 21-landmark hand tracking for 5 static signs (`Yes`, `Stop`, `Victory`, `One`, `Rock`) and guided multi-step sentence sequencing (`src/utils/sentenceEngine.js`).
+- **Dual-Track Academy, Flashcards & Timed Quizzes (`/courses`, `/practice`, `/quiz`)**: 15 Text-to-Sign and 15 LiveCam modules, self-paced flashcards, and timed quizzes.
+- **Genuine Analytics Dashboard (`/dashboard`)**: Quiz accuracy trajectory, 7-day volume, XP progression, and milestone badges computed directly from recorded `localStorage` activity.
+- **SignBot AI Proxy (`/api/chat`)**: Serverless Groq / Gemini proxy with rate limiting, input validation, safe route parsing, and local knowledge base fallback.
 
 ---
 
-## 📦 Getting Started
+## Tech Stack
 
-### Prerequisites
-- Node.js (v18 or higher)
-- npm or yarn
+- **Frontend**: React 19, Vite 8, React Router DOM 7, Tailwind CSS 4, `react-webcam`
+- **3D Rendering**: CWASA / JASign WebGL player (`public/player-applet.html`) + 2,770 `.sigml` assets in `public/`
+- **Computer Vision**: Client-side MediaPipe Hands (21 landmarks)
+- **Serverless API**: Vercel Node function (`api/chat.js`)
+- **Quality & Testing**: `oxlint`, Vitest + React Testing Library (`npm test`), Python `unittest`
 
-### Installation
+---
+
+## Getting Started
+
 ```bash
-# Clone the repository
-git clone https://github.com/Kirat23018/SignVerse.git
-cd SignVerse
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Configure server-side AI keys in `.env` (never prefix secrets with `VITE_`):
 
-### Production Build
+```env
+GROQ_API_KEY=...
+GEMINI_API_KEY=...
+```
+
+Run checks and production build:
+
 ```bash
+npm run lint
+npm test
 npm run build
 ```
 
 ---
 
-## 👥 Authors & Team
-- **Prabhkirat Kaur** - UI/UX Design Lead & Educational Curriculum Developer
-- AI, Computer Vision & Gesture Recognition Lead
-- Lead Full-Stack & 3D Avatar Architect
-
----
-
-## 📄 License
-MIT License. Created for Hackathon 2026.
+## Author
+- **Prabhkirat Kaur**

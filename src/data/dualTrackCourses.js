@@ -103,7 +103,7 @@ export const TEXT_TO_SIGN_TRACK = [
     targetWords: ['Happy', 'Sad', 'Angry', 'Excited'],
     lessons: [
       { id: 'tts-l5-1', title: 'Radiant Joy (Happy)', word: 'HAPPY', sigml: 'SignFiles/happy.sigml', duration: '5 mins', xp: 75, phonetic: '/ˈhæp.i/', summary: 'Open hands sweeping upwards repeatedly off the chest with wide smile.', handShape: 'Dual upward sweeps.', isLocked: false },
-      { id: 'tts-l5-2', title: 'Melancholy (Sad)', word: 'SAD', sigml: 'SignFiles/sad.sigml', duration: '5 mins', xp: 75, phonetic: '/sæd/', summary: 'Open hands dropping down the face accompanied by lowered eyelids.', handShape: 'Drooping palms.', isLocked: false },
+      { id: 'tts-l5-2', title: 'Melancholy (Sad)', word: 'SAD', sigml: 'DictionarySigns/behaviour_nouns/sad.sigml', duration: '5 mins', xp: 75, phonetic: '/sæd/', summary: 'Open hands dropping down the face accompanied by lowered eyelids.', handShape: 'Drooping palms.', isLocked: false },
       { id: 'tts-l5-3', title: 'Frustration (Angry)', word: 'ANGRY', sigml: 'SignFiles/angry.sigml', duration: '6 mins', xp: 75, phonetic: '/ˈæŋ.ɡri/', summary: 'Clawed hand pulling away sharply from face with furrowed brows.', handShape: 'Clawed claw.', isLocked: false },
       { id: 'tts-l5-4', title: 'High Energy (Excited)', word: 'EXCITED', sigml: 'SignFiles/good.sigml', duration: '6 mins', xp: 75, phonetic: '/ɪkˈsaɪ.tɪd/', summary: 'Middle fingers alternately brushing up chest rapidly.', handShape: 'Alternate finger brush.', isLocked: false }
     ]
@@ -204,10 +204,10 @@ export const TEXT_TO_SIGN_TRACK = [
     icon: '⛅',
     targetWords: ['Rain', 'Sun', 'Cold', 'Hot'],
     lessons: [
-      { id: 'tts-l10-1', title: 'Falling Drops (Rain)', word: 'RAIN', sigml: 'SignFiles/water.sigml', duration: '5 mins', xp: 95, phonetic: '/reɪn/', summary: 'Clawed hands drifting downward gently fluttering.', handShape: 'Descending rain fingers.', isLocked: true },
+      { id: 'tts-l10-1', title: 'Falling Drops (Rain)', word: 'RAIN', sigml: 'DictionarySigns/things_on_earth/water.sigml', duration: '5 mins', xp: 95, phonetic: '/reɪn/', summary: 'Clawed hands drifting downward gently fluttering.', handShape: 'Descending rain fingers.', isLocked: true },
       { id: 'tts-l10-2', title: 'Radiant Heat (Sun)', word: 'SUN', sigml: 'SignFiles/today.sigml', duration: '5 mins', xp: 95, phonetic: '/sʌn/', summary: 'Index finger drawing circle in sky expanding into open rays.', handShape: 'Circle into sun ray.', isLocked: true },
       { id: 'tts-l10-3', title: 'Shivering Wind (Cold)', word: 'COLD', sigml: 'SignFiles/tea.sigml', duration: '6 mins', xp: 95, phonetic: '/koʊld/', summary: 'Both fists shivering against chest in winter chills.', handShape: 'Dual fist tremor.', isLocked: true },
-      { id: 'tts-l10-4', title: 'Sweltering Warmth (Hot)', word: 'HOT', sigml: 'SignFiles/food.sigml', duration: '6 mins', xp: 95, phonetic: '/hɒt/', summary: 'Claw hand at mouth throwing heat away outward.', handShape: 'Mouth discard.', isLocked: true }
+      { id: 'tts-l10-4', title: 'Sweltering Warmth (Hot)', word: 'HOT', sigml: 'DictionarySigns/dishes_and_spices/food.sigml', duration: '6 mins', xp: 95, phonetic: '/hɒt/', summary: 'Claw hand at mouth throwing heat away outward.', handShape: 'Mouth discard.', isLocked: true }
     ]
   },
   {
@@ -225,9 +225,9 @@ export const TEXT_TO_SIGN_TRACK = [
     targetWords: ['Buy', 'Money', 'Price', 'Store'],
     lessons: [
       { id: 'tts-l11-1', title: 'Exchanging Currency (Buy)', word: 'BUY', sigml: 'SignFiles/book.sigml', duration: '6 mins', xp: 100, phonetic: '/baɪ/', summary: 'Dominant hand handing cash off non-dominant palm.', handShape: 'Cash transfer.', isLocked: true },
-      { id: 'tts-l11-2', title: 'Coins & Bills (Money)', word: 'MONEY', sigml: 'SignFiles/home.sigml', duration: '6 mins', xp: 100, phonetic: '/ˈmʌn.i/', summary: 'Flattened O-hand tapping base palm twice.', handShape: 'Dollar stack tap.', isLocked: true },
-      { id: 'tts-l11-3', title: 'Tag Cost (Price)', word: 'PRICE', sigml: 'SignFiles/school.sigml', duration: '6 mins', xp: 100, phonetic: '/praɪs/', summary: 'Crooked index brushing against palm upwards.', handShape: 'Index slice.', isLocked: true },
-      { id: 'tts-l11-4', title: 'Marketplace Boutique (Store)', word: 'STORE', sigml: 'SignFiles/welcome.sigml', duration: '6 mins', xp: 100, phonetic: '/stɔːr/', summary: 'Both tapered hands swinging out from wrists.', handShape: 'Awning swing.', isLocked: true }
+      { id: 'tts-l11-2', title: 'Coins & Bills (Money)', word: 'MONEY', sigml: 'DictionarySigns/household_articles/home.sigml', duration: '6 mins', xp: 100, phonetic: '/ˈmʌn.i/', summary: 'Flattened O-hand tapping base palm twice.', handShape: 'Dollar stack tap.', isLocked: true },
+      { id: 'tts-l11-3', title: 'Tag Cost (Price)', word: 'PRICE', sigml: 'DictionarySigns/educational_terms/school.sigml', duration: '6 mins', xp: 100, phonetic: '/praɪs/', summary: 'Crooked index brushing against palm upwards.', handShape: 'Index slice.', isLocked: true },
+      { id: 'tts-l11-4', title: 'Marketplace Boutique (Store)', word: 'STORE', sigml: 'DictionarySigns/verbs/welcome.sigml', duration: '6 mins', xp: 100, phonetic: '/stɔːr/', summary: 'Both tapered hands swinging out from wrists.', handShape: 'Awning swing.', isLocked: true }
     ]
   },
   {
@@ -245,7 +245,7 @@ export const TEXT_TO_SIGN_TRACK = [
     targetWords: ['Job', 'Office', 'Meeting', 'Email'],
     lessons: [
       { id: 'tts-l12-1', title: 'Career & Employment (Job)', word: 'JOB', sigml: 'SignFiles/tomorrow.sigml', duration: '6 mins', xp: 105, phonetic: '/dʒɒb/', summary: 'Fingerspelling J-O-B or wrist tapping work motion.', handShape: 'Dual fist work tap.', isLocked: true },
-      { id: 'tts-l12-2', title: 'Headquarters (Office)', word: 'OFFICE', sigml: 'SignFiles/school.sigml', duration: '6 mins', xp: 105, phonetic: '/ˈɒf.ɪs/', summary: 'O-hands tracing building corners in space.', handShape: 'Dual O-corner.', isLocked: true },
+      { id: 'tts-l12-2', title: 'Headquarters (Office)', word: 'OFFICE', sigml: 'DictionarySigns/educational_terms/school.sigml', duration: '6 mins', xp: 105, phonetic: '/ˈɒf.ɪs/', summary: 'O-hands tracing building corners in space.', handShape: 'Dual O-corner.', isLocked: true },
       { id: 'tts-l12-3', title: 'Team Sync (Meeting)', word: 'MEETING', sigml: 'SignFiles/friend.sigml', duration: '7 mins', xp: 105, phonetic: '/ˈmiː.tɪŋ/', summary: 'Open hands coming together fingers touching like group gathering.', handShape: 'Assembly cluster.', isLocked: true },
       { id: 'tts-l12-4', title: 'Digital Dispatch (Email)', word: 'EMAIL', sigml: 'SignFiles/book.sigml', duration: '7 mins', xp: 105, phonetic: '/ˈiː.meɪl/', summary: 'Dominant index darting through curved C non-dominant hand.', handShape: 'Envelope feed.', isLocked: true }
     ]
@@ -266,7 +266,7 @@ export const TEXT_TO_SIGN_TRACK = [
     lessons: [
       { id: 'tts-l13-1', title: 'Driving Steering (Car)', word: 'CAR', sigml: 'SignFiles/ambulance.sigml', duration: '6 mins', xp: 110, phonetic: '/kɑːr/', summary: 'Dual fists steering imaginary vehicle wheel.', handShape: 'Steering fists.', isLocked: true },
       { id: 'tts-l13-2', title: 'Railway Tracks (Train)', word: 'TRAIN', sigml: 'SignFiles/time.sigml', duration: '6 mins', xp: 110, phonetic: '/treɪn/', summary: 'Dual H-fingers sliding forward and backward across knuckles.', handShape: 'Parallel tracks.', isLocked: true },
-      { id: 'tts-l13-3', title: 'Soaring Flight (Airplane)', word: 'AIRPLANE', sigml: 'SignFiles/welcome.sigml', duration: '7 mins', xp: 110, phonetic: '/ˈeər.pleɪn/', summary: 'ILY handshape swooping forward through the air.', handShape: 'Winged ILY glide.', isLocked: true },
+      { id: 'tts-l13-3', title: 'Soaring Flight (Airplane)', word: 'AIRPLANE', sigml: 'DictionarySigns/verbs/welcome.sigml', duration: '7 mins', xp: 110, phonetic: '/ˈeər.pleɪn/', summary: 'ILY handshape swooping forward through the air.', handShape: 'Winged ILY glide.', isLocked: true },
       { id: 'tts-l13-4', title: 'Navigating Routes (Map)', word: 'MAP', sigml: 'SignFiles/book.sigml', duration: '7 mins', xp: 110, phonetic: '/mæp/', summary: 'M-hands unfolding imaginary paper blueprint.', handShape: 'Unfolding M-hands.', isLocked: true }
     ]
   },
@@ -306,7 +306,7 @@ export const TEXT_TO_SIGN_TRACK = [
     lessons: [
       { id: 'tts-l15-1', title: 'Handset Device (Phone)', word: 'PHONE', sigml: 'SignFiles/alert.sigml', duration: '7 mins', xp: 125, phonetic: '/foʊn/', summary: 'Y-hand thumb to ear, pinky to mouth.', handShape: 'Y-hand to ear.', isLocked: true },
       { id: 'tts-l15-2', title: 'Processing Rig (Computer)', word: 'COMPUTER', sigml: 'SignFiles/book.sigml', duration: '7 mins', xp: 125, phonetic: '/kəmˈpjuː.tər/', summary: 'C-hand bouncing upwards along non-dominant arm.', handShape: 'C-hand arm climb.', isLocked: true },
-      { id: 'tts-l15-3', title: 'Global Web (Internet)', word: 'INTERNET', sigml: 'SignFiles/welcome.sigml', duration: '7 mins', xp: 125, phonetic: '/ˈɪn.tə.nɛt/', summary: 'Middle fingers rotating against each other at fingertips.', handShape: 'Interlinked fingertips.', isLocked: true },
+      { id: 'tts-l15-3', title: 'Global Web (Internet)', word: 'INTERNET', sigml: 'DictionarySigns/verbs/welcome.sigml', duration: '7 mins', xp: 125, phonetic: '/ˈɪn.tə.nɛt/', summary: 'Middle fingers rotating against each other at fingertips.', handShape: 'Interlinked fingertips.', isLocked: true },
       { id: 'tts-l15-4', title: 'Digital Display (Screen)', word: 'SCREEN', sigml: 'SignFiles/today.sigml', duration: '7 mins', xp: 125, phonetic: '/skriːn/', summary: 'Both index fingers outlining rectangular monitor border.', handShape: 'Rectangle outline.', isLocked: true }
     ]
   }

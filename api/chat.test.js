@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import handler, {
   isSafeInternalRoute,
   parseActionFromResponse,
-  validateChatPayload
+  validateChatPayload,
+  resetRateLimiter
 } from './chat.js';
 
 function createMockRes() {
@@ -29,6 +30,7 @@ describe('api/chat serverless proxy', () => {
   beforeEach(() => {
     delete process.env.GROQ_API_KEY;
     delete process.env.GEMINI_API_KEY;
+    resetRateLimiter();
   });
 
   it('allows valid internal routes and blocks open-redirect / dangerous protocols', () => {
@@ -111,6 +113,26 @@ describe('api/chat serverless proxy', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ fallback: true, isRealtimeAI: false });
     expect(JSON.stringify(res.body)).not.toContain(dummyGeminiKey);
+  });
+
+  it('enforces per-IP sliding window rate limiting with 429 and Retry-After header', async () => {
+    const req = {
+      method: 'POST',
+      body: { query: 'Hello' },
+      headers: { 'x-forwarded-for': '203.0.113.5' }
+    };
+
+    for (let i = 0; i < 20; i += 1) {
+      const res = createMockRes();
+      await handler(req, res);
+      expect(res.statusCode).toBe(200);
+    }
+
+    const blockedRes = createMockRes();
+    await handler(req, blockedRes);
+    expect(blockedRes.statusCode).toBe(429);
+    expect(blockedRes.headers['Retry-After']).toBeTruthy();
+    expect(blockedRes.body.error).toMatch(/too many requests/i);
   });
 });
 

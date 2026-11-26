@@ -1,10 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+const FEEDBACK_STORAGE_KEY = 'signverse_feedback_history';
 
 export default function Feedback() {
   const [rating, setRating] = useState('5');
   const [suggestions, setSuggestions] = useState('');
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FEEDBACK_STORAGE_KEY) || '[]');
+      if (Array.isArray(saved)) setHistory(saved);
+    } catch {
+      setHistory([]);
+    }
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -13,6 +25,19 @@ export default function Feedback() {
       setError('Please enter at least 5 characters of feedback.');
       setSubmitted(false);
       return;
+    }
+    const entry = {
+      id: Date.now(),
+      rating,
+      text: cleaned,
+      submittedAt: new Date().toLocaleDateString()
+    };
+    const updated = [entry, ...history].slice(0, 10);
+    setHistory(updated);
+    try {
+      localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // Safe storage guard
     }
     setError('');
     setSubmitted(true);
@@ -79,6 +104,25 @@ export default function Feedback() {
             Submit Feedback
           </button>
         </form>
+
+        {history.length > 0 && (
+          <div style={{ marginTop: '24px', textAlign: 'left', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: '14px', fontWeight: '800', color: '#A3CBB7' }}>
+              Saved Feedback ({history.length})
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {history.slice(0, 3).map((item) => (
+                <div key={item.id} style={{ padding: '10px 12px', borderRadius: '10px', backgroundColor: '#191C1A', border: '1px solid rgba(255,255,255,0.08)', fontSize: '12.5px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7CA992', fontWeight: '700', marginBottom: '4px' }}>
+                    <span>Rating: {item.rating} / 5</span>
+                    <span style={{ color: '#9CAEA4' }}>{item.submittedAt}</span>
+                  </div>
+                  <div style={{ color: '#E4EAE6' }}>{item.text}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

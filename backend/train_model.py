@@ -263,15 +263,15 @@ def export_tfjs_standalone(target_dir, words):
     with open(model_json_path, "w") as f:
         json.dump(tfjs_manifest, f, indent=2)
 
-    # Metadata for browser frontend
+    # Metadata for browser frontend (explicitly flags untrained scaffold weights)
     metadata = {
-        "modelName": "SignVerse Dynamic Gesture LSTM",
+        "modelName": "SignVerse Dynamic Gesture LSTM (Untrained Architecture Export)",
         "sequenceLength": SEQUENCE_LENGTH,
         "numLandmarks": NUM_LANDMARKS,
         "featureDim": FEATURE_DIM,
         "classes": words,
-        "exportedAt": "2026-10-31",
-        "accuracyScore": 0.942
+        "weightsStatus": "untrained_random_init",
+        "accuracyScore": None
     }
     with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=2)
