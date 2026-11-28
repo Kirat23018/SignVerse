@@ -9,6 +9,11 @@ import {
   detectSentenceComponent,
   checkTokenMatchesStep
 } from "../utils/sentenceEngine";
+import {
+  loadMediaPipeHandsBundle,
+  cleanupCameraResources,
+  createFrameDispatcher
+} from "../utils/mediapipeLoader";
 
 // MediaPipe 21 hand landmark connections
 const HAND_CONNECTIONS = [
@@ -283,13 +288,12 @@ export default function LiveCam() {
     return { id: "", gesture: "Tracking Hand", text: "", conf: 0.4 };
   }, []);
 
-  // 3. Draw Skeleton Overlay onto Canvas (Supports up to 2 hands simultaneously)
+  // 3. Draw Skeleton Overlay onto Canvas (Batched 2D paths, zero expensive per-primitive shadowBlur)
   const drawSkeleton = useCallback((multiHands, multiHandedness, canvas) => {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Dynamically match canvas internal width/height to active video stream resolution
     const video = webcamRef.current?.video;
     if (video && video.videoWidth && video.videoHeight) {
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -298,10 +302,8 @@ export default function LiveCam() {
       }
     }
 
-    ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!showSkeleton || !multiHands || multiHands.length === 0) {
-      ctx.restore();
       return;
     }
 
@@ -309,67 +311,70 @@ export default function LiveCam() {
     const h = canvas.height;
     const isMirrored = userSettings.cameraMirror;
 
-    // Process each detected hand independently
-    multiHands.forEach((landmarks, handIndex) => {
-      if (!landmarks || landmarks.length < 21) return;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 3.2;
+    ctx.font = "bold 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+
+    for (let handIndex = 0; handIndex < multiHands.length; handIndex += 1) {
+      const landmarks = multiHands[handIndex];
+      if (!landmarks || landmarks.length < 21) continue;
+
       const isSecondHand = handIndex === 1;
       const rawHandedness = multiHandedness?.[handIndex]?.label;
       const handLabel = rawHandedness ? `${rawHandedness} Hand` : (handIndex === 0 ? "Hand 1" : "Hand 2");
 
-      // Hand 1: Emerald Green (#10b981 / #34d399) | Hand 2: Sky Cyan (#38bdf8 / #7dd3fc)
       const boneColor = isSecondHand ? "#38bdf8" : "#10b981";
-      const boneGlow = isSecondHand ? "#0284c7" : "#059669";
       const tipColor = isSecondHand ? "#7dd3fc" : "#34d399";
 
+      // Single batched stroke for all 21 bone segments per hand
       ctx.strokeStyle = boneColor;
-      ctx.lineWidth = 3.5;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = boneGlow;
-
-      // Draw bone connections
-      HAND_CONNECTIONS.forEach(([i, j]) => {
+      ctx.beginPath();
+      for (let c = 0; c < HAND_CONNECTIONS.length; c += 1) {
+        const [i, j] = HAND_CONNECTIONS[c];
         const p1 = landmarks[i];
         const p2 = landmarks[j];
-        if (p1 && p2) {
-          ctx.beginPath();
-          const x1 = isMirrored ? (1 - p1.x) * w : p1.x * w;
-          const y1 = p1.y * h;
-          const x2 = isMirrored ? (1 - p2.x) * w : p2.x * w;
-          const y2 = p2.y * h;
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-        }
-      });
+        if (!p1 || !p2) continue;
+        ctx.moveTo(isMirrored ? (1 - p1.x) * w : p1.x * w, p1.y * h);
+        ctx.lineTo(isMirrored ? (1 - p2.x) * w : p2.x * w, p2.y * h);
+      }
+      ctx.stroke();
 
-      // Draw joint nodes
-      landmarks.forEach((p, index) => {
+      // Single batched fill for inner joints (excluding tips 4, 8, 12, 16, 20)
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      for (let idx = 0; idx < landmarks.length; idx += 1) {
+        if (idx === 4 || idx === 8 || idx === 12 || idx === 16 || idx === 20) continue;
+        const p = landmarks[idx];
         const x = isMirrored ? (1 - p.x) * w : p.x * w;
         const y = p.y * h;
-        const isTip = [4, 8, 12, 16, 20].includes(index);
+        ctx.moveTo(x + 3.5, y);
+        ctx.arc(x, y, 3.5, 0, 2 * Math.PI);
+      }
+      ctx.fill();
 
-        ctx.beginPath();
-        ctx.arc(x, y, isTip ? 6 : 4, 0, 2 * Math.PI);
-        ctx.fillStyle = isTip ? tipColor : "#ffffff";
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = "#ffffff";
-        ctx.fill();
-      });
+      // Single batched fill for the 5 fingertip joints
+      ctx.fillStyle = tipColor;
+      ctx.beginPath();
+      for (const tipIdx of [4, 8, 12, 16, 20]) {
+        const p = landmarks[tipIdx];
+        if (!p) continue;
+        const x = isMirrored ? (1 - p.x) * w : p.x * w;
+        const y = p.y * h;
+        ctx.moveTo(x + 5.5, y);
+        ctx.arc(x, y, 5.5, 0, 2 * Math.PI);
+      }
+      ctx.fill();
 
-      // Draw clean text hand label near the wrist
       const wrist = landmarks[0];
       if (wrist) {
         const wx = isMirrored ? (1 - wrist.x) * w : wrist.x * w;
         const wy = Math.max(wrist.y * h - 14, 18);
-        ctx.font = "bold 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
         ctx.fillStyle = boneColor;
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
         ctx.fillText(handLabel.toUpperCase(), Math.max(10, wx - 26), wy);
       }
-    });
+    }
 
     ctx.restore();
   }, [showSkeleton, userSettings.cameraMirror]);
@@ -403,11 +408,20 @@ export default function LiveCam() {
   const completedSentenceRef = useRef(completedSentence);
   completedSentenceRef.current = completedSentence;
 
-  // Temporal debounce, transition detection, and cooldown refs
+  // Temporal debounce, transition detection, UI state-diffing, and cooldown refs
   const candTokenRef = useRef(null);
   const candTokenFramesRef = useRef(0);
   const canAcceptNextTokenRef = useRef(true);
   const sentenceCooldownUntilRef = useRef(0);
+  const lastUiSnapshotRef = useRef({
+    handCount: -1,
+    handLabelsKey: '',
+    gesture: '',
+    text: '',
+    signId: '',
+    confPct: -1,
+    candToken: null
+  });
 
   const resetSentenceSequence = useCallback(() => {
     setDetectedSequence([]);
@@ -436,83 +450,94 @@ export default function LiveCam() {
     }
   }, []);
 
-  // 4. MediaPipe CDN Loader & 30-Frame Sequence Ingestion
+  // 4. MediaPipe CDN Loader & Backpressure-Guarded Frame Processing
   useEffect(() => {
+    if (isModuleLocked) {
+      setStatus("Module Locked — Unlock Pro to activate live camera tracking.");
+      return;
+    }
+
     let isUnmounted = false;
+    let retryTimerId = null;
     const canvasEl = canvasRef.current;
+    const videoElRef = () => webcamRef.current?.video || null;
 
-    const loadScriptSafely = (src, globalCheck) => {
-      return new Promise((resolve, reject) => {
-        if (globalCheck()) return resolve();
-        const existing = document.querySelector(`script[src="${src}"]`);
-        if (existing) {
-          if (globalCheck()) return resolve();
-          existing.addEventListener("load", () => resolve());
-          existing.addEventListener("error", (e) => reject(e));
-          return;
-        }
+    const dispatcher = createFrameDispatcher({ minIntervalMs: 33 });
+    let isTabHidden = typeof document !== "undefined" ? document.hidden : false;
+    const handleVisibilityChange = () => {
+      isTabHidden = document.hidden;
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
 
-        const script = document.createElement("script");
-        script.src = src;
-        script.async = true;
-        script.crossOrigin = "anonymous";
-        script.onload = () => resolve();
-        script.onerror = (err) => {
-          console.error(`[SignVerse MediaPipe] Failed to load CDN script: ${src}`, err);
-          reject(err);
-        };
-        document.head.appendChild(script);
-      });
+    const commitUiState = ({ handCount, handLabels, handLabelsKey, gesture, text, signId, conf, candToken }) => {
+      const snap = lastUiSnapshotRef.current;
+      const confPct = Math.round((conf || 0) * 100);
+
+      if (snap.handCount !== handCount) {
+        snap.handCount = handCount;
+        setDetectedHandsCount(handCount);
+      }
+      if (snap.handLabelsKey !== handLabelsKey) {
+        snap.handLabelsKey = handLabelsKey;
+        setDetectedHandTypes(handLabels);
+      }
+      if (snap.gesture !== gesture) {
+        snap.gesture = gesture;
+        setActiveGesture(gesture);
+      }
+      if (text !== undefined && snap.text !== text) {
+        snap.text = text;
+        setLiveText(text);
+      }
+      if (signId !== undefined && snap.signId !== signId) {
+        snap.signId = signId;
+        setActiveSignId(signId);
+      }
+      if (snap.confPct !== confPct) {
+        snap.confPct = confPct;
+        setConfidence(conf || 0);
+      }
+      if (candToken !== undefined && snap.candToken !== candToken) {
+        snap.candToken = candToken;
+        setActiveCandidateToken(candToken);
+      }
     };
 
     const initMediaPipeCDN = async () => {
       try {
-        setStatus("Loading MediaPipe Camera...");
-        await loadScriptSafely(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js",
-          () => !!window.Camera
-        );
-
-        setStatus("Loading MediaPipe Hands...");
-        await loadScriptSafely(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js",
-          () => !!window.Hands
-        );
+        setStatus("Loading MediaPipe Vision Engine...");
+        await loadMediaPipeHandsBundle();
 
         if (isUnmounted) return;
         setStatus("Initializing Hand Detector...");
 
-        if (!window.Hands) {
-          console.error("[SignVerse MediaPipe] window.Hands is not available on window object. CDN script may have failed to load.");
-          throw new Error("window.Hands global not found");
-        }
-        if (!window.Camera) {
-          console.error("[SignVerse MediaPipe] window.Camera is not available on window object. Camera Utils CDN script may have failed to load.");
-          throw new Error("window.Camera global not found");
+        if (!window.Hands || !window.Camera) {
+          throw new Error("MediaPipe Hands/Camera globals not available");
         }
 
         const hands = new window.Hands({
           locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
 
+        const detConf = Math.min(0.95, Math.max(0.35, Number(userSettings.trackingConfidence) || 0.65));
         hands.setOptions({
           maxNumHands: 2,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
+          modelComplexity: 0,
+          minDetectionConfidence: detConf,
+          minTrackingConfidence: Math.max(0.4, Math.round((detConf - 0.1) * 100) / 100)
         });
 
-        // ================= MediaPipe onResults Callback (Multi-Hand) =================
+        // ================= MediaPipe onResults Callback (Diffed State Updates) =================
         hands.onResults((results) => {
           if (isUnmounted) return;
           const canvas = canvasRef.current;
           const multiHands = results?.multiHandLandmarks || [];
           const multiHandedness = results?.multiHandedness || [];
           const handCount = multiHands.length;
-
-          setDetectedHandsCount(handCount);
-          const handLabels = multiHandedness.map((h, i) => h.label ? `${h.label} Hand` : `Hand ${i + 1}`);
-          setDetectedHandTypes(handLabels);
+          const handLabels = multiHandedness.map((h, i) => (h.label ? `${h.label} Hand` : `Hand ${i + 1}`));
+          const handLabelsKey = handLabels.join('|');
 
           if (handCount > 0) {
             drawSkeletonRef.current(multiHands, multiHandedness, canvas);
@@ -520,23 +545,29 @@ export default function LiveCam() {
             const primaryLandmarks = multiHands[0];
             const secondaryLandmarks = multiHands[1] || null;
 
-            // ================= BRANCH BY RECOGNITION MODE =================
             if (recognitionModeRef.current === "sentence") {
-              // ================= MODE B: TEMPORAL SENTENCE RECOGNITION =================
               const now = Date.now();
-              // Detect custom sentence components supporting single or two hands
               const comp = detectSentenceComponent(primaryLandmarks, "", secondaryLandmarks);
 
-              // If currently in cooldown after full sentence completion, hold current display
               if (now < sentenceCooldownUntilRef.current) {
-                // In cooldown
+                commitUiState({
+                  handCount,
+                  handLabels,
+                  handLabelsKey,
+                  gesture: lastUiSnapshotRef.current.gesture,
+                  conf: lastUiSnapshotRef.current.confPct / 100
+                });
               } else if (comp.token && comp.conf >= 0.70) {
-                setActiveCandidateToken(comp);
-                setActiveGesture(comp.label);
-                setLiveText(comp.label);
-                setConfidence(comp.conf);
+                commitUiState({
+                  handCount,
+                  handLabels,
+                  handLabelsKey,
+                  gesture: comp.label,
+                  text: comp.label,
+                  conf: comp.conf,
+                  candToken: comp
+                });
 
-                // Debounce consecutive frames
                 if (candTokenRef.current === comp.token) {
                   candTokenFramesRef.current += 1;
                 } else {
@@ -544,7 +575,6 @@ export default function LiveCam() {
                   candTokenFramesRef.current = 1;
                 }
 
-                // If held stably for at least 5 frames and hand transition condition met:
                 if (candTokenFramesRef.current >= 5 && canAcceptNextTokenRef.current) {
                   const activeSentence =
                     TARGET_SENTENCES.find((s) => s.id === selectedSentenceIdRef.current) ||
@@ -554,23 +584,21 @@ export default function LiveCam() {
                   const targetStep = activeSentence.tokens[nextStepIndex];
 
                   if (targetStep && checkTokenMatchesStep(comp.token, targetStep)) {
-                    // Valid next step in sentence!
+                    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
                     const updatedSeq = [
                       ...currentSeq,
                       {
                         token: comp.token,
                         label: targetStep.label,
                         badge: targetStep.badge || `STEP ${nextStepIndex + 1}`,
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                        time: timeStr
                       }
                     ];
                     detectedSequenceRef.current = updatedSeq;
                     setDetectedSequence(updatedSeq);
-                    canAcceptNextTokenRef.current = false; // Require physical transition before accepting next sign
+                    canAcceptNextTokenRef.current = false;
 
                     if (updatedSeq.length === activeSentence.tokens.length) {
-                      // FULL SENTENCE RECOGNIZED!
-                      const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
                       const resSentence = {
                         english: activeSentence.english,
                         dialect: activeSentence.dialect,
@@ -583,7 +611,6 @@ export default function LiveCam() {
                       setSentenceStatus(`Sentence Recognized: "${activeSentence.english}"`);
                       sentenceCooldownUntilRef.current = now + 3000;
 
-                      // Log to history
                       setHistory((prev) => [
                         {
                           text: activeSentence.english,
@@ -593,7 +620,6 @@ export default function LiveCam() {
                         ...prev.slice(0, 14)
                       ]);
 
-                      // Audio speech readout
                       speakSentence(activeSentence.english);
                     } else {
                       const nextTarget = activeSentence.tokens[updatedSeq.length];
@@ -601,27 +627,25 @@ export default function LiveCam() {
                         `Step ${updatedSeq.length}/${activeSentence.tokens.length} matched: "${targetStep.label}". Release hand, then perform "${nextTarget.label}".`
                       );
                     }
-                  } else {
-                    if (targetStep) {
-                      setSentenceStatus(
-                        `Detected "${comp.label}". Expected next: "${targetStep.label}".`
-                      );
-                    }
+                  } else if (targetStep) {
+                    setSentenceStatus(`Detected "${comp.label}". Expected next: "${targetStep.label}".`);
                   }
                 }
               } else {
-                // Hand in view but not in target sign pose -> Transition detected!
                 candTokenRef.current = null;
                 candTokenFramesRef.current = 0;
                 canAcceptNextTokenRef.current = true;
-                setActiveCandidateToken(null);
-                if (!completedSentenceRef.current) {
-                  setLiveText("");
-                }
+                commitUiState({
+                  handCount,
+                  handLabels,
+                  handLabelsKey,
+                  gesture: "Tracking Hand...",
+                  text: completedSentenceRef.current ? lastUiSnapshotRef.current.text : "",
+                  conf: 0,
+                  candToken: null
+                });
               }
             } else {
-              // ================= MODE A: INSTANT GEOMETRIC CLASSIFIER (5 WORDS) =================
-              // Test primary hand and secondary hand (supports single-hand or two-hand signing)
               let res = detectGestureRef.current(primaryLandmarks);
               const res2 = secondaryLandmarks ? detectGestureRef.current(secondaryLandmarks) : null;
 
@@ -631,12 +655,16 @@ export default function LiveCam() {
                 res = res2;
               }
 
-              setActiveGesture(res.gesture);
-
               const activeText = res.text;
-              setLiveText(activeText);
-              setActiveSignId(res.id);
-              setConfidence(res.conf);
+              commitUiState({
+                handCount,
+                handLabels,
+                handLabelsKey,
+                gesture: res.gesture,
+                text: activeText,
+                signId: res.id,
+                conf: res.conf
+              });
 
               const curExpected = expectedTargetRef.current;
               if (activeText && curExpected) {
@@ -657,7 +685,9 @@ export default function LiveCam() {
                             list.push(curDrill);
                             localStorage.setItem("signverse_completed_lessons", JSON.stringify(list));
                           }
-                        } catch {}
+                        } catch {
+                          // Safe localStorage guard
+                        }
                       }
                     }
                     return updated;
@@ -683,22 +713,32 @@ export default function LiveCam() {
               const ctx = canvas.getContext("2d");
               ctx?.clearRect(0, 0, canvas.width, canvas.height);
             }
-            setActiveGesture("Awaiting Hand Sign...");
-            setLiveText("");
-            setActiveSignId("");
-            setConfidence(0);
-
-            // Natural transition: hand lowered or moved outside frame
             candTokenRef.current = null;
             candTokenFramesRef.current = 0;
             canAcceptNextTokenRef.current = true;
-            setActiveCandidateToken(null);
+            commitUiState({
+              handCount: 0,
+              handLabels: [],
+              handLabelsKey: '',
+              gesture: "Awaiting Hand Sign...",
+              text: "",
+              signId: "",
+              conf: 0,
+              candToken: null
+            });
           }
 
           frameCountRef.current += 1;
           const now = Date.now();
           if (now - lastTimeRef.current >= 1000) {
-            setFps(frameCountRef.current);
+            const measuredFps = frameCountRef.current;
+            setFps(measuredFps);
+            if (typeof window !== "undefined") {
+              window.__SIGNVERSE_CAMERA_METRICS__ = {
+                fps: measuredFps,
+                ...dispatcher.getMetrics()
+              };
+            }
             frameCountRef.current = 0;
             lastTimeRef.current = now;
           }
@@ -706,23 +746,15 @@ export default function LiveCam() {
 
         handsInstanceRef.current = hands;
 
-        // Start camera feed once video stream is ready
         let retryCount = 0;
         const checkVideoAndStart = () => {
           if (isUnmounted) return;
-          const video = webcamRef.current?.video;
+          const video = videoElRef();
           if (video && video.readyState >= 2) {
-            console.log("[SignVerse Camera] Video element ready. Starting Camera stream...");
             const camera = new window.Camera(video, {
               onFrame: async () => {
                 if (isUnmounted || !handsInstanceRef.current) return;
-                try {
-                  if (video && video.readyState >= 2 && !video.paused) {
-                    await handsInstanceRef.current.send({ image: video });
-                  }
-                } catch (frameErr) {
-                  console.error("[SignVerse Camera] Frame processing error in hands.send:", frameErr);
-                }
+                await dispatcher.dispatch(video, handsInstanceRef.current, { isPaused: isTabHidden });
               },
               width: 640,
               height: 480
@@ -733,22 +765,19 @@ export default function LiveCam() {
                 if (!isUnmounted) {
                   setIsReady(true);
                   setStatus("MediaPipe Active");
-                  console.log("[SignVerse Camera] Camera stream started successfully.");
                 }
               })
-              .catch((camErr) => {
-                console.error("[SignVerse Camera] Failed to start camera stream:", camErr);
+              .catch(() => {
                 if (!isUnmounted) setStatus("Camera start error. Check webcam permissions.");
               });
 
             cameraInstanceRef.current = camera;
           } else {
-            retryCount++;
+            retryCount += 1;
             if (retryCount < 50) {
-              setTimeout(checkVideoAndStart, 150);
-            } else {
-              console.warn("[SignVerse Camera] Timed out waiting for webcam video stream.");
-              if (!isUnmounted) setStatus("Webcam stream timeout. Check camera permissions.");
+              retryTimerId = setTimeout(checkVideoAndStart, 150);
+            } else if (!isUnmounted) {
+              setStatus("Webcam stream timeout. Check camera permissions.");
             }
           }
         };
@@ -764,30 +793,20 @@ export default function LiveCam() {
 
     return () => {
       isUnmounted = true;
-      if (cameraInstanceRef.current) {
-        try {
-          cameraInstanceRef.current.stop();
-          console.log("[SignVerse Camera] Camera stopped on unmount.");
-        } catch (e) {
-          console.warn("[SignVerse Camera] Error stopping camera on unmount:", e);
-        }
-        cameraInstanceRef.current = null;
+      if (retryTimerId) clearTimeout(retryTimerId);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
       }
-      if (handsInstanceRef.current) {
-        try {
-          handsInstanceRef.current.close();
-          console.log("[SignVerse MediaPipe] Hands closed on unmount.");
-        } catch (e) {
-          console.warn("[SignVerse MediaPipe] Error closing hands instance on unmount:", e);
-        }
-        handsInstanceRef.current = null;
-      }
-      if (canvasEl) {
-        const ctx = canvasEl.getContext("2d");
-        ctx?.clearRect(0, 0, canvasEl.width, canvasEl.height);
-      }
+      cleanupCameraResources({
+        camera: cameraInstanceRef.current,
+        hands: handsInstanceRef.current,
+        video: videoElRef(),
+        canvas: canvasEl
+      });
+      cameraInstanceRef.current = null;
+      handsInstanceRef.current = null;
     };
-  }, [userSettings.cameraId, userSettings.trackingConfidence, speakSentence]);
+  }, [isModuleLocked, userSettings.cameraId, userSettings.trackingConfidence, speakSentence]);
 
   const clearHistory = () => {
     setHistory([]);

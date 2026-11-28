@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
 import AIChatBot from './AIChatBot';
 import CWASA3DAvatar from './CWASA3DAvatar';
+import ErrorBoundary from './ErrorBoundary';
 import UnlockProModal from './UnlockProModal';
 import Login from '../pages/login';
 import Signup from '../pages/signup';
@@ -171,6 +172,29 @@ describe('Auth & Feedback forms', () => {
     fireEvent.change(screen.getByLabelText(/your suggestions/i), { target: { value: 'Love the 3D avatars!' } });
     fireEvent.click(screen.getByRole('button', { name: /submit feedback/i }));
     expect(screen.getByRole('status')).toHaveTextContent(/thank you/i);
+  });
+
+  it('catches rendering errors gracefully in ErrorBoundary and supports reset', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let shouldThrow = true;
+    function BuggyWidget() {
+      if (shouldThrow) throw new Error('Simulated crash');
+      return <div>Recovered view</div>;
+    }
+
+    render(
+      <ErrorBoundary>
+        <BuggyWidget />
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/something went wrong/i);
+    expect(screen.getByText(/simulated crash/i)).toBeInTheDocument();
+
+    shouldThrow = false;
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    expect(screen.getByText('Recovered view')).toBeInTheDocument();
+    errSpy.mockRestore();
   });
 });
 

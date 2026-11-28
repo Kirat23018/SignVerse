@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { askGeminiRealtime, isSafeInternalRoute, QUICK_SUGGESTIONS } from '../utils/aiBotEngine';
 
-export default function AIChatBot() {
+export default React.memo(function AIChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -697,4 +697,4 @@ export default function AIChatBot() {
       `}</style>
     </>
   );
-}
+});

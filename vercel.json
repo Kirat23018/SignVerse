@@ -2,7 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/uea-jas/:path*",
+      "destination": "https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/:path*"
+    },
+    {
+      "source": "/((?!api/|uea-jas/).*)",
       "destination": "/index.html"
     }
   ],
@@ -32,7 +36,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://vhg.cmp.uea.ac.uk; style-src 'self' 'unsafe-inline' https://vhg.cmp.uea.ac.uk; img-src 'self' data: blob: https://vhg.cmp.uea.ac.uk; font-src 'self' data: https://vhg.cmp.uea.ac.uk; connect-src 'self' https://vhg.cmp.uea.ac.uk https://cdn.jsdelivr.net ws: wss:; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://vhg.cmp.uea.ac.uk; style-src 'self' 'unsafe-inline' https://vhg.cmp.uea.ac.uk; img-src 'self' data: blob: https://vhg.cmp.uea.ac.uk; font-src 'self' data: https://vhg.cmp.uea.ac.uk; connect-src 'self' https://vhg.cmp.uea.ac.uk https://cdn.jsdelivr.net; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
         }
       ]
     }

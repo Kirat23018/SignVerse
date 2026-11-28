@@ -4,6 +4,7 @@ import './App.css';
 
 import Home from './pages/home';
 import AIChatBot from './components/AIChatBot';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Route-level code splitting to keep initial bundle lean and maintain top efficiency
 const TextToSignHub = lazy(() => import('./pages/TextToSignHub'));
@@ -57,7 +58,7 @@ function RouteLoadingFallback() {
 }
 
 // Accessible, Soothing 'Sage & Muted Slate' Navigation Bar
-export function NavigationBar({ isAuthenticated, handleLogout }) {
+export const NavigationBar = React.memo(function NavigationBar({ isAuthenticated, handleLogout }) {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -360,7 +361,7 @@ export function NavigationBar({ isAuthenticated, handleLogout }) {
       </nav>
     </header>
   );
-}
+});
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -395,7 +396,8 @@ export default function App() {
         <NavigationBar isAuthenticated={isAuthenticated} handleLogout={handleLogout} />
 
         <main id="main-content" tabIndex={-1} style={{ flex: 1, outline: 'none' }}>
-          <Suspense fallback={<RouteLoadingFallback />}>
+          <ErrorBoundary>
+            <Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
               {/* 1. Home Landing Page */}
               <Route path="/" element={<Home />} />
@@ -445,7 +447,8 @@ export default function App() {
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </Suspense>
+            </Suspense>
+          </ErrorBoundary>
         </main>
 
         {/* Global Floating AI Chatbot */}

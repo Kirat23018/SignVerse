@@ -9,6 +9,8 @@ import {
   resolveSigmlPath,
   fetchAndCacheSiGML,
   playSiGMLFast,
+  preloadSiGMLBatch,
+  getSigmlCacheStats,
   getAllVocabulary,
   getQuizVocabulary
 } from './sigmlService';
@@ -28,6 +30,7 @@ import {
   resetFreeTrial
 } from './subscriptionManager';
 import { updateStreak, getStreak } from './streakManager';
+import { createFrameDispatcher, cleanupCameraResources } from './mediapipeLoader';
 import {
   buildIslGlossSequence,
   translateEnglishToISL,
@@ -122,6 +125,43 @@ describe('sigmlService', () => {
       window.location.origin
     );
     expect(await playSiGMLFast(fakeIframe, 'https://evil.com/x.sigml')).toBe(false);
+  });
+
+  it('deduplicates concurrent in-flight SiGML fetches and preloads batches', async () => {
+    const beforeStats = getSigmlCacheStats();
+    let resolveFetch;
+    const pendingResponse = new Promise((res) => {
+      resolveFetch = res;
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockReturnValue(pendingResponse);
+
+    const p1 = fetchAndCacheSiGML('concurrent_dedup_sign_901');
+    const p2 = fetchAndCacheSiGML('concurrent_dedup_sign_901');
+    const p3 = fetchAndCacheSiGML('concurrent_dedup_sign_901');
+
+    resolveFetch({
+      ok: true,
+      text: async () => '<sigml><hns_sign gloss="DEDUP"/></sigml>'
+    });
+
+    const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+    expect(r1).toBe('<sigml><hns_sign gloss="DEDUP"/></sigml>');
+    expect(r2).toBe(r1);
+    expect(r3).toBe(r1);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () => '<sigml><hns_sign gloss="BATCH"/></sigml>'
+    });
+    await preloadSiGMLBatch([
+      'SignFiles/batch_one_902.sigml',
+      'SignFiles/batch_two_903.sigml',
+      'SignFiles/batch_one_902.sigml'
+    ]);
+    const afterStats = getSigmlCacheStats();
+    expect(afterStats.cachedCount).toBeGreaterThanOrEqual(beforeStats.cachedCount + 3);
+    expect(afterStats.inFlightCount).toBe(0);
   });
 
   it('builds vocabulary and quiz lists without single-letter or pure-number entries in quiz pool', () => {
@@ -273,6 +313,51 @@ describe('islTranslator (English-to-ISL Linguistic Approximation)', () => {
     expect(result.steps.some((s) => s.matchType === 'synonym')).toBe(true);
     expect(result.steps.some((s) => s.matchType === 'fingerspell')).toBe(true);
     expect(result.steps.every((s) => typeof s.file === 'string' && s.file.endsWith('.sigml'))).toBe(true);
+  });
+});
+
+describe('mediapipeLoader (Camera Frame Pacer & Resource Cleanup)', () => {
+  it('enforces backpressure, pauses when requested, and skips duplicate video frames', async () => {
+    const dispatcher = createFrameDispatcher({ minIntervalMs: 33 });
+    let resolveFirst;
+    const send = vi.fn().mockImplementationOnce(
+      () => new Promise((res) => {
+        resolveFirst = res;
+      })
+    );
+    const hands = { send };
+    const video = { readyState: 2, paused: false, ended: false, currentTime: 0.1 };
+
+    // Paused tab skips inference
+    expect(await dispatcher.dispatch(video, hands, { isPaused: true })).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+
+    // First valid frame starts processing; overlapping call drops cleanly due to backpressure
+    const firstPromise = dispatcher.dispatch(video, hands);
+    video.currentTime = 0.2;
+    expect(await dispatcher.dispatch(video, hands)).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    resolveFirst();
+    expect(await firstPromise).toBe(true);
+    expect(dispatcher.getMetrics().totalProcessed).toBe(1);
+  });
+
+  it('stops camera, closes hands, and releases all MediaStream tracks cleanly', () => {
+    const camera = { stop: vi.fn() };
+    const hands = { close: vi.fn() };
+    const track1 = { stop: vi.fn() };
+    const track2 = { stop: vi.fn() };
+    const video = { srcObject: { getTracks: () => [track1, track2] } };
+    const clearRect = vi.fn();
+    const canvas = { width: 640, height: 480, getContext: () => ({ clearRect }) };
+
+    cleanupCameraResources({ camera, hands, video, canvas });
+    expect(camera.stop).toHaveBeenCalledTimes(1);
+    expect(hands.close).toHaveBeenCalledTimes(1);
+    expect(track1.stop).toHaveBeenCalledTimes(1);
+    expect(track2.stop).toHaveBeenCalledTimes(1);
+    expect(clearRect).toHaveBeenCalledWith(0, 0, 640, 480);
   });
 });
 

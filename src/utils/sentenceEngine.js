@@ -121,11 +121,21 @@ export const TARGET_SENTENCES = [
   },
 ];
 
-// Helper to inspect finger states for a single hand
+function dist2D(p1, p2) {
+  return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+}
+
+function isFingerExtended(wrist, mcp, pip, tip) {
+  return (
+    dist2D(wrist, tip) > dist2D(wrist, pip) * 1.10 &&
+    dist2D(mcp, tip) > dist2D(mcp, pip) * 1.20 &&
+    tip.y < pip.y + 0.05
+  );
+}
+
+// Helper to inspect finger states for a single hand (zero per-frame closure allocations)
 function analyzeHandFingers(landmarks) {
   if (!landmarks || landmarks.length < 21) return null;
-
-  const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
   const wrist = landmarks[0];
   const thumbMcp = landmarks[2];
@@ -144,27 +154,19 @@ function analyzeHandFingers(landmarks) {
   const pinkyPip = landmarks[18];
   const pinkyTip = landmarks[20];
 
-  const palmScale = Math.max(dist(wrist, middleMcp), 0.05);
+  const palmScale = Math.max(dist2D(wrist, middleMcp), 0.05);
 
-  const isExtended = (mcp, pip, tip) => {
-    return (
-      dist(wrist, tip) > dist(wrist, pip) * 1.10 &&
-      dist(mcp, tip) > dist(mcp, pip) * 1.20 &&
-      tip.y < pip.y + 0.05
-    );
-  };
-
-  const isIndexExt = isExtended(indexMcp, indexPip, indexTip);
-  const isMiddleExt = isExtended(middleMcp, middlePip, middleTip);
-  const isRingExt = isExtended(ringMcp, ringPip, ringTip);
-  const isPinkyExt = isExtended(pinkyMcp, pinkyPip, pinkyTip);
+  const isIndexExt = isFingerExtended(wrist, indexMcp, indexPip, indexTip);
+  const isMiddleExt = isFingerExtended(wrist, middleMcp, middlePip, middleTip);
+  const isRingExt = isFingerExtended(wrist, ringMcp, ringPip, ringTip);
+  const isPinkyExt = isFingerExtended(wrist, pinkyMcp, pinkyPip, pinkyTip);
 
   const isThumbUp =
     thumbTip.y < thumbIp.y - 0.02 &&
     thumbTip.y < thumbMcp.y - 0.04 &&
     thumbTip.y < indexMcp.y - 0.02;
 
-  const isThumbOut = dist(thumbTip, indexMcp) / palmScale > 0.80;
+  const isThumbOut = dist2D(thumbTip, indexMcp) / palmScale > 0.80;
 
   const isAllFive = isIndexExt && isMiddleExt && isRingExt && isPinkyExt;
   const isTwoFinger = isIndexExt && isMiddleExt && !isRingExt && !isPinkyExt;
@@ -179,13 +181,13 @@ function analyzeHandFingers(landmarks) {
     !isMiddleExt &&
     !isRingExt &&
     !isPinkyExt &&
-    (dist(thumbTip, indexTip) / palmScale > 0.65) &&
-    (dist(thumbTip, indexMcp) / palmScale > 0.70);
+    (dist2D(thumbTip, indexTip) / palmScale > 0.65) &&
+    (dist2D(thumbTip, indexMcp) / palmScale > 0.70);
 
-  const isVSeparated = isTwoFinger && (dist(indexTip, middleTip) / palmScale > 0.20);
-  const isHParallel = isTwoFinger && (dist(indexTip, middleTip) / palmScale <= 0.25);
+  const isVSeparated = isTwoFinger && (dist2D(indexTip, middleTip) / palmScale > 0.20);
+  const isHParallel = isTwoFinger && (dist2D(indexTip, middleTip) / palmScale <= 0.25);
 
-  const isWideSplay = isAllFive && (dist(indexTip, middleTip) / palmScale > 0.16) && (dist(thumbTip, pinkyTip) / palmScale > 1.15);
+  const isWideSplay = isAllFive && (dist2D(indexTip, middleTip) / palmScale > 0.16) && (dist2D(thumbTip, pinkyTip) / palmScale > 1.15);
 
   return {
     wrist,

@@ -6,7 +6,7 @@
 
 <title>SiGML Player Applet loc.2017</title>
 
-<link rel="stylesheet" href="https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/cwa/cwasa.css" />
+<link rel="stylesheet" href="/uea-jas/cwa/cwasa.css" />
 <style>
   html, body {
     width: 100%;
@@ -35,16 +35,22 @@
     display: block !important;
   }
 </style>
-<script type="text/javascript" src="https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/cwa/allcsa.js"></script>
 <script language="javascript">
-	// Initial configuration with explicit HTTPS URLs to avoid mixed content blocking on deployed HTTPS sites
+	window.xsltUsePolyfillOnlyIfNeeded = true;
+	window.xsltDontAutoloadXmlDocs = true;
+</script>
+<script type="text/javascript" src="/vendor/xslt-polyfill.min.js" charset="utf-8"></script>
+<script type="text/javascript" src="/uea-jas/cwa/allcsa.js"></script>
+<script language="javascript">
+	// Use same-origin /uea-jas proxy (Vite dev/preview + Vercel rewrites) so JAR/XML XHR loads cleanly without CORS errors
+	var ueaJasBase = window.location.origin + "/uea-jas/";
 	var initCfg = {
-		"jasBase": "https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/",
-		"cwaBase": "https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/cwa/",
+		"jasBase": ueaJasBase,
+		"cwaBase": ueaJasBase + "cwa/",
 		"useCwaConfig": false,
 		"useAvatarJARs": true,
-		"avJARBase": "https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/avatars/",
-		"sigmlBase": "https://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/sigml/",
+		"avJARBase": ueaJasBase + "avatars/",
+		"sigmlBase": ueaJasBase + "sigml/",
 		"avsbsl": ["luna", "siggi", "anna", "marc", "francoise"],
 		"avSettings": { "avList": "avsbsl", "initAv": "luna" }
 	};
@@ -57,11 +63,82 @@
 <script language="javascript">
 
 var VALID_AVATARS = ["luna", "siggi", "anna", "marc", "francoise"];
+var isCharacterReady = false;
+var isSwitchingAvatar = false;
+var isXsltWasmReady = typeof window.xsltPolyfillReady !== "function";
+var pendingPlayCmd = null;
+var pendingAvatar = null;
+var readyPollTimer = null;
+
+if (typeof window.xsltPolyfillReady === "function") {
+	window.xsltPolyfillReady()
+		.then(function() { isXsltWasmReady = true; })
+		.catch(function() { isXsltWasmReady = true; });
+}
+
+// UEA's COMMON.jar ships only COMMON/config.xml; CWASA's AvDataAccess.extractAvDef() probes 4 XML tags
+// and creates rejected promises for missing optional tags (asd, avDef, nonManuals) on COMMON.
+window.addEventListener("unhandledrejection", function(event) {
+	var msg = event && event.reason ? String(event.reason.message || event.reason) : "";
+	if (/^No (asd|avDef|nonManuals) for COMMON$/.test(msg)) {
+		event.preventDefault();
+	}
+});
 
 function notifyParent(payload) {
 	if (window.parent && window.parent !== window) {
 		window.parent.postMessage(payload, window.location.origin);
 	}
+}
+
+function checkCwasaControlsEnabled() {
+	var playBtn = document.querySelector(".bttnPlaySiGMLURL");
+	var avMenu = document.querySelector(".CWASAAvMenu select");
+	var canvas = document.querySelector(".CWASAAvatar canvas");
+	return Boolean(
+		isXsltWasmReady &&
+		canvas &&
+		playBtn &&
+		!playBtn.disabled &&
+		(!avMenu || !avMenu.disabled)
+	);
+}
+
+function flushQueuedCommands() {
+	if (pendingAvatar) {
+		var nextAv = pendingAvatar;
+		pendingAvatar = null;
+		setAvatar(nextAv);
+		if (isSwitchingAvatar) return;
+	}
+	if (pendingPlayCmd && isCharacterReady && !isSwitchingAvatar) {
+		var cmd = pendingPlayCmd;
+		pendingPlayCmd = null;
+		if (cmd.kind === "text") {
+			executePlayText(cmd.value);
+		} else if (cmd.kind === "url") {
+			executeStartPlayer(cmd.value);
+		}
+	}
+}
+
+function startCharacterReadyPoll() {
+	if (readyPollTimer) return;
+	var startedAt = Date.now();
+	readyPollTimer = setInterval(function() {
+		if (checkCwasaControlsEnabled()) {
+			clearInterval(readyPollTimer);
+			readyPollTimer = null;
+			isCharacterReady = true;
+			isSwitchingAvatar = false;
+			notifyParent({ type: "CWASA_STATUS", status: "ready", avatar: (document.querySelector(".CWASAAvMenu select") || {}).value || initCfg.avSettings.initAv });
+			flushQueuedCommands();
+		} else if (Date.now() - startedAt > 20000) {
+			clearInterval(readyPollTimer);
+			readyPollTimer = null;
+			isSwitchingAvatar = false;
+		}
+	}, 60);
 }
 
 function initSignVerseAvatar() {
@@ -75,7 +152,7 @@ function initSignVerseAvatar() {
 	}
 	try {
 		CWASA.init(initCfg);
-		notifyParent({ type: "CWASA_STATUS", status: "ready", avatar: initCfg.avSettings.initAv });
+		startCharacterReadyPoll();
 	} catch (e) {
 		notifyParent({
 			type: "CWASA_STATUS",
@@ -89,21 +166,47 @@ function setAvatar(avatarName) {
 	if (typeof avatarName !== "string") return;
 	var clean = avatarName.trim().toLowerCase();
 	if (VALID_AVATARS.indexOf(clean) === -1) return;
-	try {
-		var avSelect = document.querySelector(".CWASAAvMenu select");
-		if (avSelect) {
-			avSelect.value = clean;
-			avSelect.dispatchEvent(new Event("change", { bubbles: true }));
-		} else if (typeof CWASA !== "undefined" && typeof CWASA.setAvatar === "function") {
-			CWASA.setAvatar(clean, 0);
-		}
+
+	var avSelect = document.querySelector(".CWASAAvMenu select");
+	if (!avSelect || avSelect.options.length === 0) {
+		pendingAvatar = clean;
+		startCharacterReadyPoll();
+		return;
+	}
+
+	if (avSelect.value === clean && isCharacterReady) {
 		notifyParent({ type: "CWASA_STATUS", status: "avatar_changed", avatar: clean });
+		return;
+	}
+
+	try {
+		var hasOption = false;
+		for (var i = 0; i < avSelect.options.length; i += 1) {
+			if (avSelect.options[i].value === clean) {
+				hasOption = true;
+				break;
+			}
+		}
+		if (!hasOption) return;
+
+		isSwitchingAvatar = true;
+		isCharacterReady = false;
+		if (readyPollTimer) {
+			clearInterval(readyPollTimer);
+			readyPollTimer = null;
+		}
+		avSelect.value = clean;
+		avSelect.dispatchEvent(new Event("change", { bubbles: true }));
+		notifyParent({ type: "CWASA_STATUS", status: "avatar_changed", avatar: clean });
+		// Defer poll until CWASA's setTimeout(loadNewAvatar, 0) disables controls during JAR fetch
+		setTimeout(startCharacterReadyPoll, 50);
 	} catch (e) {
+		isSwitchingAvatar = false;
 		console.warn("Avatar switch error:", e);
 	}
 }
 
-function playText(stext) {
+function executePlayText(stext) {
 	if (!stext) return;
 	try {
 		if (typeof CWASA === "undefined" || typeof CWASA.playSiGMLText !== "function") {
@@ -125,7 +228,18 @@ function playText(stext) {
 	}
 }
 
+function playText(stext) {
+	if (!stext) return;
+	if (!isCharacterReady || isSwitchingAvatar) {
+		pendingPlayCmd = { kind: "text", value: stext };
+		startCharacterReadyPoll();
+		return;
+	}
+	executePlayText(stext);
+}
+
 function stopPlayer() {
+	pendingPlayCmd = null;
 	try {
 		if (window.CWASA && typeof CWASA.stopSiGML === 'function') {
 			CWASA.stopSiGML();
@@ -160,11 +274,11 @@ function setSiGMLURL(sigmlURL) {
 	return url;
 }
 
-function startPlayer(sigmlURL) {
+function executeStartPlayer(sigmlURL) {
 	if (!isSafeSigmlPath(sigmlURL)) return;
 	var fullUrl = setSiGMLURL(sigmlURL);
 	if (!fullUrl) return;
-	
+
 	// Fetch the SiGML content directly, sanitize any BOM, XML declaration, or rogue prolog comments:
 	fetch(fullUrl)
 		.then(function(response) {
@@ -174,7 +288,6 @@ function startPlayer(sigmlURL) {
 		.then(function(rawText) {
 			if (!rawText) return;
 			var clean = rawText.trim();
-			// Strip UTF-8 BOM
 			if (clean.charCodeAt(0) === 0xFEFF) {
 				clean = clean.slice(1);
 			}
@@ -187,8 +300,7 @@ function startPlayer(sigmlURL) {
 				clean = clean.substring(0, sigmlEnd + 8);
 			}
 			clean = clean.replace(/<sigml>\s*-->/gi, '<sigml>');
-			
-			// Play via playSiGMLText directly
+
 			try {
 				CWASA.playSiGMLText(clean);
 			} catch (err) {
@@ -213,22 +325,25 @@ function startPlayer(sigmlURL) {
 		});
 }
 
+function startPlayer(sigmlURL) {
+	if (!isSafeSigmlPath(sigmlURL)) return;
+	if (!isCharacterReady || isSwitchingAvatar) {
+		pendingPlayCmd = { kind: "url", value: sigmlURL };
+		startCharacterReadyPoll();
+		return;
+	}
+	executeStartPlayer(sigmlURL);
+}
+
 // Global window message listener for cross-frame commands from same-origin React parent
 window.addEventListener('message', function(event) {
 	if (!event || !event.data) return;
 	if (event.origin && event.origin !== window.location.origin) return;
-	
+
 	if (event.data && event.data.type === 'PLAY_SIGML') {
 		var sigmlUrl = event.data.payload || event.data.file || event.data.url;
 		if (!isSafeSigmlPath(sigmlUrl)) return;
-		// CWASA specific call to play the file
-		if (typeof CWASA !== 'undefined') {
-			if (typeof startPlayer === 'function') {
-				startPlayer(sigmlUrl);
-			} else if (typeof CWASA.playSiGMLURL === 'function') {
-				CWASA.playSiGMLURL(sigmlUrl);
-			}
-		}
+		startPlayer(sigmlUrl);
 		return;
 	}
 
